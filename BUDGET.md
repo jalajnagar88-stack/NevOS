@@ -72,6 +72,59 @@ is the single most important reason to expect 30 fps to be reachable at all.
 
 ---
 
+## M2 — persona
+
+### Internal SRAM — unchanged
+
+The persona adds no static allocation of its own. `nev_persona_core_t` is one
+static instance of 232 bytes; the face's LVGL objects come from the existing
+`LV_MEM_SIZE` pool.
+
+| Item | Bytes | Note |
+|---|---|---|
+| `nev_persona_core_t` | 232 | one static instance |
+| Face LVGL objects | ~2 KB | 2 eyes x (rect + 2 lids + glint + squint arc), from the LVGL pool |
+| **Committed total** | **~397 KB** | of 512 KB |
+
+### Frame time
+
+| Measurement | Boot screen | Persona | Measured where |
+|---|---|---|---|
+| Average frame | 144 us | 1,084 us | **host x86, headless** |
+| Worst frame | 998 us | 2,392 us | **host x86, headless** |
+| Frames over budget | 0 of 120 | 0 of 700 | **host x86, headless** |
+
+The face costs roughly **7x** the boot screen per frame. That ratio is the
+number worth carrying forward, because it is the part that transfers to the
+device even though the absolute microseconds do not. Two things drive it:
+rotating the eyes forces LVGL to allocate and composite a transform layer per
+eye, and the happy squint cross-fades two overlapping shapes for about three
+frames per transition.
+
+Both are affordable at 30 fps on x86 with enormous headroom. Neither is
+obviously affordable on an ESP32-S3 at 240 MHz rendering from PSRAM, and this
+is the single biggest open question going into M5. The levers, in order:
+
+1. Drop eye rotation below a slant threshold — most moods use little or none,
+   and skipping the transform entirely when `rotation == 0` is free.
+2. Shorten the cross-fade band so fewer frames draw both shapes.
+3. Reduce the number of primitives per eye.
+
+### A performance finding worth recording
+
+An earlier version of the vector renderer rotated each lid as a *sibling* of the
+eye rather than as a child. That forced LVGL to allocate a transform layer the
+size of each lid ellipse — larger than `LV_MEM_SIZE` — which sent it into a
+subdivision path that took **over seven minutes to render six frames**.
+
+The same work as clipped children of the eye, inheriting its rotation, takes
+**207 ms**. The lesson generalises past this renderer: on this platform, a
+transform layer that does not fit in the LVGL pool is not merely slow, it is
+pathological. Any future rotated or scaled object should be checked against
+`LV_MEM_SIZE` before it ships.
+
+---
+
 ## Method
 
 Internal and PSRAM figures come from `sizeof` and from the allocation sites,

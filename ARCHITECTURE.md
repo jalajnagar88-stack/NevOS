@@ -178,8 +178,15 @@ does not glitch.
 
 Consumes events (shake, tap, idle timeout, game win, agent thinking, low
 battery) and publishes `PERSONA_MOOD_CHANGED`. Exposes exactly one imperative
-call upward-facing shim: `persona_set_mood(mood, intensity, duration)`, which
-is implemented as a bus publish so the rule in R1 is not quietly broken.
+call, `nev_persona_set_mood(mood, intensity, hold_ms)`. An app or appkit calling
+it is an L5/L4 to L3 call — downward, and therefore legal under R1. `nev_bridge`
+may **not** call it, being a peer at L3; the daemon drives the face by
+publishing `BRIDGE.MOOD_HINT`, which persona subscribes to.
+
+The component splits in two so that the personality is testable: `persona_core`
+holds the mood machine, the tween, blink timing and idle drift, and depends on
+neither LVGL nor the bus nor any clock — `now_ms` is an argument. `persona`
+binds it to both. See `docs/persona.md`.
 
 ### L4 — `nev_appkit`
 

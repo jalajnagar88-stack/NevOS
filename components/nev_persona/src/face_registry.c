@@ -1,19 +1,18 @@
 /*
- * The candidate designs. Two of these get deleted once a direction is chosen;
- * the registry exists so the choice can be made from rendered output instead
- * of from a description.
+ * The face designs.
+ *
+ * Three candidates were rendered side by side to choose a direction; the
+ * eyes-only design won and the other two were deleted rather than kept around
+ * as dead alternatives. The registry stays because the indirection costs one
+ * pointer and is what made the comparison possible in the first place.
  */
 #include "nev_persona/face.h"
 #include <string.h>
 
 extern const nev_face_renderer_t nev_face_renderer_vector;
-extern const nev_face_renderer_t nev_face_renderer_full;
-extern const nev_face_renderer_t nev_face_renderer_orb;
 
 static const nev_face_renderer_t *const kRenderers[] = {
     &nev_face_renderer_vector,
-    &nev_face_renderer_full,
-    &nev_face_renderer_orb,
 };
 
 size_t nev_face_renderer_count(void) {

@@ -27,8 +27,11 @@ static const nev_face_params_t kPresets[NEV_MOOD_COUNT] = {
     /* CURIOUS     head cocked, gaze off-axis, pupils opening                   */
     [NEV_MOOD_CURIOUS]     = { 1.00f,  0.00f, 1.08f, 1.00f,  0.45f,-0.15f, 1.15f,   0.50f,-0.30f,   0.20f, 0.15f, 1.00f,   0.55f, 0.00f, 0.00f,  0.00f, 0.65f },
 
-    /* HAPPY       the squint sells it; a smile without one reads as a smirk    */
-    [NEV_MOOD_HAPPY]       = { 0.44f, -0.35f, 1.05f, 1.00f,  0.00f, 0.00f, 1.00f,   0.35f, 0.00f,   0.85f, 0.30f, 1.15f,   0.00f, 0.00f,-0.15f,  0.35f, 0.85f },
+    /* HAPPY       the squint sells it; a smile without one reads as a smirk.
+     *             eye_slant stays 0: a real squint is symmetric, and a negative
+     *             slant here is the SAD direction — with no mouth to argue
+     *             otherwise it made the eyes-only design read as miserable.    */
+    [NEV_MOOD_HAPPY]       = { 0.44f,  0.00f, 1.05f, 1.00f,  0.00f, 0.00f, 1.00f,   0.35f, 0.00f,   0.85f, 0.30f, 1.15f,   0.00f, 0.00f,-0.15f,  0.35f, 0.85f },
 
     /* FOCUSED     narrowed and level. Attention reads as an absence of motion  */
     [NEV_MOOD_FOCUSED]     = { 0.70f,  0.25f, 0.95f, 0.95f,  0.00f, 0.00f, 0.80f,  -0.40f, 0.00f,  -0.05f, 0.00f, 0.85f,   0.00f, 0.00f, 0.00f,  0.00f, 0.60f },
@@ -37,10 +40,10 @@ static const nev_face_params_t kPresets[NEV_MOOD_COUNT] = {
     [NEV_MOOD_SLEEPY]      = { 0.22f, -0.20f, 0.90f, 1.00f,  0.00f, 0.40f, 0.85f,  -0.50f, 0.00f,  -0.10f, 0.00f, 0.80f,  -0.30f, 0.00f, 0.25f,  0.00f, 0.20f },
 
     /* CELEBRATING everything open and up. The one mood allowed to be loud      */
-    [NEV_MOOD_CELEBRATING] = { 0.34f, -0.50f, 1.20f, 1.00f,  0.00f, 0.00f, 1.00f,   1.00f, 0.00f,   1.00f, 0.75f, 1.30f,   0.00f, 0.00f,-0.40f,  0.60f, 1.00f },
+    [NEV_MOOD_CELEBRATING] = { 0.34f,  0.00f, 1.20f, 1.00f,  0.00f, 0.00f, 1.00f,   1.00f, 0.00f,   1.00f, 0.75f, 1.30f,   0.00f, 0.00f,-0.40f,  0.60f, 1.00f },
 
     /* CONCERNED   inner brows up; that one cue carries most of the worry       */
-    [NEV_MOOD_CONCERNED]   = { 1.00f, -0.55f, 1.05f, 1.00f,  0.00f,-0.10f, 1.20f,   0.35f, 0.85f,  -0.60f, 0.00f, 0.90f,  -0.20f, 0.00f, 0.00f,  0.00f, 0.35f },
+    [NEV_MOOD_CONCERNED]   = { 0.88f, -0.70f, 0.94f, 1.06f,  0.00f,-0.10f, 1.20f,   0.35f, 0.85f,  -0.60f, 0.00f, 0.90f,  -0.20f, 0.00f, 0.10f,  0.00f, 0.35f },
 
     /* THINKING    looking at nothing in particular, asymmetric brow            */
     [NEV_MOOD_THINKING]    = { 0.80f,  0.10f, 1.00f, 1.00f, -0.60f,-0.50f, 0.90f,   0.25f,-0.18f,  -0.15f, 0.00f, 0.80f,   0.30f, 0.00f, 0.00f,  0.00f, 0.70f },

@@ -25,6 +25,7 @@ add_library(nevos_core STATIC
   ${NEV_PORT_HOST_SRCS}
   ${NEV_KERNEL_SRCS}
   ${NEV_PERSONA_DIR}/src/face_presets.c
+  ${NEV_PERSONA_DIR}/src/persona_core.c
 )
 target_include_directories(nevos_core PUBLIC
   ${NEV_PORT_INCLUDE_DIRS}

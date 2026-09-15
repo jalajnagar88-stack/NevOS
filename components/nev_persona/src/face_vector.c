@@ -20,10 +20,11 @@
 #define EYE_RADIUS 44
 
 typedef struct {
-    lv_obj_t *eye;
+    lv_obj_t *eye; /* open state: rounded rect with lids   */
     lv_obj_t *lid_top;
     lv_obj_t *lid_bottom;
     lv_obj_t *glint;
+    lv_obj_t *squint; /* happy state: an upward arc           */
 } eye_t;
 
 static lv_obj_t *s_root;
@@ -75,6 +76,22 @@ static nev_err_t vector_create(lv_obj_t *parent) {
 
         s_eye[i].glint = make_block(s_eye[i].eye, FACE_SCLERA, 12);
         lv_obj_set_style_bg_opa(s_eye[i].glint, LV_OPA_40, LV_PART_MAIN);
+
+        /*
+         * The happy eye is a separate primitive, cross-faded with the rect.
+         *
+         * Subtracting a lid from a rounded rectangle can only ever cut the
+         * bottom edge upward, which leaves a band that is THIN in the middle
+         * and thick at the sides — a moustache, not a squint. A happy eye is an
+         * upward arc, and an arc is what LVGL draws when you ask for one. The
+         * two shapes cross-fade over a narrow band of closure, so the
+         * transition still tweens rather than popping.
+         */
+        s_eye[i].squint = lv_arc_create(s_root);
+        lv_obj_remove_style(s_eye[i].squint, NULL, LV_PART_KNOB);
+        lv_obj_remove_flag(s_eye[i].squint, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_style_arc_opa(s_eye[i].squint, LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_arc_rounded(s_eye[i].squint, true, LV_PART_INDICATOR);
     }
     return NEV_OK;
 }
@@ -111,9 +128,11 @@ static void vector_apply(const nev_face_params_t *p) {
         lv_obj_set_pos(s_eye[i].eye, ex, ey);
         lv_obj_set_style_bg_color(s_eye[i].eye, accent, LV_PART_MAIN);
 
-        /* Slant tilts each eye's inner corner; mirrored so the pair reads as
-         * one expression rather than two independent shapes. */
-        const int32_t slant = (int32_t)(p->eye_slant * 16.0f) * sign * -1;
+        /* Slant tilts each eye's inner corner; mirrored so the pair reads as one
+         * expression rather than two independent shapes. The range is wider than
+         * the other designs use because in a face with no mouth and no brows,
+         * this is the only cue sadness and sternness have. */
+        const int32_t slant = (int32_t)(p->eye_slant * 24.0f) * sign * -1;
         lv_obj_set_style_transform_pivot_x(s_eye[i].eye, w / 2, LV_PART_MAIN);
         lv_obj_set_style_transform_pivot_y(s_eye[i].eye, h / 2, LV_PART_MAIN);
         lv_obj_set_style_transform_rotation(s_eye[i].eye, (slant + tilt_deg) * 10, LV_PART_MAIN);
@@ -131,29 +150,30 @@ static void vector_apply(const nev_face_params_t *p) {
          * carries them, so neither lid sets a transform of its own. */
         const int32_t top_cover = (int32_t)(h * closure * (1.0f - bottom_bias));
         const int32_t bot_cover = (int32_t)(h * closure * bottom_bias);
+
         /*
          * The lid must be a CIRCLE, not a wide rounded rectangle. LVGL clamps
          * LV_RADIUS_CIRCLE to half the shorter side, so a 2.4:1 rectangle is a
          * stadium: rounded ends with a flat edge between them, and the eye only
          * ever sees the flat part.
-         *
-         * The circle's diameter sets how deep the crescent is: at 1.7x the eye
-         * width the edge only falls ~20px from apex to eye edge, which reads as
-         * a scalloped rectangle rather than a squint. At 1.3x it falls ~35px,
-         * which is a curve.
          */
-        const int32_t ld = (int32_t)(w * 1.3f);
-        const int32_t lw = ld;
-        const int32_t lh = ld;
-        const int32_t lx = w / 2 - lw / 2;
+        /*
+         * The two lids want different curvatures. The upper lid is a soft line
+         * across the whole eye, so it needs a large, gentle circle — a tight one
+         * only covers the middle and cuts a V-notch instead of a lid. The lower
+         * lid only handles mild closure now that the happy squint is an arc, so
+         * it can be gentle too.
+         */
+        const int32_t ld_top = (int32_t)(w * 2.4f);
+        const int32_t ld_bot = (int32_t)(w * 2.0f);
 
-        lv_obj_set_size(s_eye[i].lid_top, lw, lh);
-        lv_obj_set_pos(s_eye[i].lid_top, lx, top_cover - lh);
+        lv_obj_set_size(s_eye[i].lid_top, ld_top, ld_top);
+        lv_obj_set_pos(s_eye[i].lid_top, w / 2 - ld_top / 2, top_cover - ld_top);
         lv_obj_set_style_opa(s_eye[i].lid_top, top_cover > 0 ? LV_OPA_COVER : LV_OPA_TRANSP,
                              LV_PART_MAIN);
 
-        lv_obj_set_size(s_eye[i].lid_bottom, lw, lh);
-        lv_obj_set_pos(s_eye[i].lid_bottom, lx, h - bot_cover);
+        lv_obj_set_size(s_eye[i].lid_bottom, ld_bot, ld_bot);
+        lv_obj_set_pos(s_eye[i].lid_bottom, w / 2 - ld_bot / 2, h - bot_cover);
         lv_obj_set_style_opa(s_eye[i].lid_bottom, bot_cover > 0 ? LV_OPA_COVER : LV_OPA_TRANSP,
                              LV_PART_MAIN);
 
@@ -165,6 +185,26 @@ static void vector_apply(const nev_face_params_t *p) {
         lv_obj_set_style_opa(s_eye[i].glint, open > 0.25f ? LV_OPA_40 : LV_OPA_TRANSP,
                              LV_PART_MAIN);
         lv_obj_move_foreground(s_eye[i].glint);
+
+        /*
+         * Cross-fade to the arc. `squint` ramps 0 to 1 as the bottom-closing
+         * portion passes about a quarter of the eye's height, which is the
+         * point where the carved rect stops reading as an eye.
+         */
+        const float squint = face_clampf((closure * bottom_bias - 0.22f) * 4.5f, 0.0f, 1.0f);
+        lv_obj_set_style_opa(s_eye[i].eye, face_opa(1.0f - squint), LV_PART_MAIN);
+
+        const int32_t ad = (int32_t)(w * 1.45f);
+        const int32_t stroke = (int32_t)(h * 0.30f * (0.7f + 0.3f * open));
+        lv_obj_set_size(s_eye[i].squint, ad, ad);
+        lv_obj_set_pos(s_eye[i].squint, ex + w / 2 - ad / 2, ey + h / 2 - ad / 2 + ad / 5);
+        lv_obj_set_style_arc_width(s_eye[i].squint, stroke, LV_PART_INDICATOR);
+        lv_obj_set_style_arc_color(s_eye[i].squint, accent, LV_PART_INDICATOR);
+        lv_obj_set_style_opa(s_eye[i].squint, face_opa(squint), LV_PART_MAIN);
+
+        /* 270 degrees is the top of the circle, so this span is a dome. */
+        lv_arc_set_rotation(s_eye[i].squint, 0);
+        lv_arc_set_angles(s_eye[i].squint, 226, 314);
     }
 }
 

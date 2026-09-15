@@ -1,24 +1,27 @@
 /*
  * NEVOS simulator entry point.
  *
- * This is the M1 boot screen: a wordmark, a live frame counter, and a spinning
- * arc. The counter is deliberately NOT read from display_service directly — it
- * arrives as a DISPLAY.FRAME_STATS event over the bus, so that the thing on
- * screen proves the bus is carrying traffic in the running system and not only
- * under test.
+ * Two screens:
+ *   default    the M1 boot screen — wordmark, spinning arc, live frame counter
+ *   --persona  the M2 face, driven by the mood machine
  *
- * Run:
- *   build/host/nevos_sim                      window, until closed
- *   build/host/nevos_sim --frames 90 --shot out.ppm
+ * In both cases the thing on screen is fed by bus traffic rather than by
+ * reaching into a service, so the running simulator demonstrates the event bus
+ * and not only the test suite does.
+ *
+ *   build/host/nevos_sim                          boot screen, window
+ *   build/host/nevos_sim --persona                the face, interactive
+ *   build/host/nevos_sim --persona --script       a scripted event sequence
+ *   build/host/nevos_sim --persona --mood sleepy --frames 90 --shot out.ppm
  */
 #include "nev_board/board_sim.h"
 #include "nev_kernel/nev_blob.h"
 #include "nev_kernel/nev_bus.h"
+#include "nev_persona/persona.h"
 #include "nev_port/nev_assert.h"
 #include "nev_port/nev_log.h"
 #include "nev_port/nev_mem.h"
 #include "nev_port/nev_time.h"
-#include "nev_persona/face.h"
 #include "nev_services/display_service.h"
 #include "lvgl.h"
 #include <stdio.h>
@@ -35,6 +38,9 @@
 
 static lv_obj_t *s_counter_label;
 static lv_obj_t *s_arc;
+static lv_obj_t *s_mood_label;
+
+/* ------------------------------------------------------------- boot screen */
 
 static void build_boot_screen(void) {
     lv_obj_t *screen = lv_screen_active();
@@ -94,7 +100,6 @@ static void start_arc_animation(void) {
     lv_anim_start(&a);
 }
 
-/* The screen is driven by bus traffic, not by reaching into display_service. */
 static void apply_frame_stats(const nev_p_frame_t *f) {
     lv_label_set_text_fmt(s_counter_label, "frame %u  " LV_SYMBOL_BULLET "  %u.%u fps",
                           (unsigned)f->frame, (unsigned)(f->fps_q4 / 16u),
@@ -102,56 +107,100 @@ static void apply_frame_stats(const nev_p_frame_t *f) {
     lv_obj_align(s_counter_label, LV_ALIGN_CENTER, 0, 62);
 }
 
-static void build_face_screen(const nev_face_renderer_t *renderer, nev_mood_t mood) {
+/* ----------------------------------------------------------- persona screen */
+
+static void build_persona_screen(nev_mood_t start_mood) {
     lv_obj_t *screen = lv_screen_active();
     lv_obj_set_style_bg_color(screen, COLOR_BG, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_remove_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
 
-    NEV_CHECK(renderer->create(screen) == NEV_OK);
-    renderer->apply(nev_face_preset(mood));
+    NEV_CHECK(nev_persona_init(screen) == NEV_OK);
+    nev_persona_set_mood(start_mood, 255, 0);
 
-    /* Self-labelled so a contact sheet of these needs no external annotation. */
-    lv_obj_t *caption = lv_label_create(screen);
-    lv_label_set_text_fmt(caption, "%s  %s  %s", renderer->id, LV_SYMBOL_BULLET,
-                          nev_mood_name(mood));
-    lv_obj_set_style_text_color(caption, COLOR_MUTED, LV_PART_MAIN);
-    lv_obj_align(caption, LV_ALIGN_BOTTOM_MID, 0, -16);
-    lv_obj_move_foreground(caption);
+    s_mood_label = lv_label_create(screen);
+    lv_obj_set_style_text_color(s_mood_label, COLOR_MUTED, LV_PART_MAIN);
+    lv_obj_align(s_mood_label, LV_ALIGN_BOTTOM_MID, 0, -16);
+    lv_obj_move_foreground(s_mood_label);
 }
 
+/*
+ * A scripted sequence of the events the persona reacts to. Published on the bus
+ * as the real producers would, so this exercises the whole path — bus, mapping
+ * table, mood machine, renderer — rather than just calling set_mood.
+ */
 typedef struct {
-    uint32_t max_frames; /* 0 = run until the window closes */
+    uint32_t at_ms;
+    uint16_t type;
+    uint8_t source;
+    uint8_t arg;
+} scripted_event_t;
+
+static const scripted_event_t kScript[] = {
+    {1200, NEV_EVT_INPUT_GESTURE_TAP, NEV_SRC_INPUT, 200},
+    {4200, NEV_EVT_INPUT_GESTURE_SHAKE, NEV_SRC_INPUT, 0},
+    {7000, NEV_EVT_BRIDGE_AGENT_TOKEN, NEV_SRC_BRIDGE, 0},
+    {10500, NEV_EVT_BRIDGE_AGENT_DONE, NEV_SRC_BRIDGE, 0},
+    {12500, NEV_EVT_GAME_HIGHSCORE_BEAT, NEV_SRC_GAME, 0},
+    {17000, NEV_EVT_POWER_IDLE_ENTER, NEV_SRC_POWER, 0},
+    {21000, NEV_EVT_POWER_IDLE_EXIT, NEV_SRC_POWER, 0},
+};
+
+static void run_script(uint32_t now_ms, size_t *cursor) {
+    while (*cursor < sizeof(kScript) / sizeof(kScript[0]) && now_ms >= kScript[*cursor].at_ms) {
+        const scripted_event_t *s = &kScript[*cursor];
+        nev_event_t ev = nev_event_make(s->type, s->source);
+        ev.p.gesture.strength = s->arg;
+        (void)nev_bus_publish(&ev);
+        NEV_LOGI(TAG, "script: %s", nev_evt_name(s->type));
+        (*cursor)++;
+    }
+}
+
+/* --------------------------------------------------------------- arguments */
+
+typedef struct {
+    uint32_t max_frames;
     const char *shot_path;
-    const char *face_id;   /* NULL renders the boot screen instead */
-    const char *mood_name; /* NULL means idle                      */
+    const char *strip_dir;
+    uint32_t strip_every;
+    bool persona;
+    bool script;
+    const char *mood_name;
 } options_t;
 
+static void usage(const char *argv0) {
+    fprintf(stderr,
+            "usage: %s [--persona] [--script] [--mood NAME]\n"
+            "          [--frames N] [--shot PATH.ppm]\n"
+            "          [--strip DIR] [--strip-every N]\n",
+            argv0);
+    exit(2);
+}
+
 static options_t parse_args(int argc, char **argv) {
-    options_t o = {0};
+    options_t o = {.strip_every = 6};
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--frames") == 0 && i + 1 < argc) {
+        const char *a = argv[i];
+        if (!strcmp(a, "--frames") && i + 1 < argc)
             o.max_frames = (uint32_t)strtoul(argv[++i], NULL, 10);
-        } else if (strcmp(argv[i], "--shot") == 0 && i + 1 < argc) {
+        else if (!strcmp(a, "--shot") && i + 1 < argc)
             o.shot_path = argv[++i];
-        } else if (strcmp(argv[i], "--face") == 0 && i + 1 < argc) {
-            o.face_id = argv[++i];
-        } else if (strcmp(argv[i], "--mood") == 0 && i + 1 < argc) {
+        else if (!strcmp(a, "--strip") && i + 1 < argc)
+            o.strip_dir = argv[++i];
+        else if (!strcmp(a, "--strip-every") && i + 1 < argc)
+            o.strip_every = (uint32_t)strtoul(argv[++i], NULL, 10);
+        else if (!strcmp(a, "--mood") && i + 1 < argc)
             o.mood_name = argv[++i];
-        } else if (strcmp(argv[i], "--list-faces") == 0) {
-            for (size_t k = 0; k < nev_face_renderer_count(); k++) {
-                const nev_face_renderer_t *r = nev_face_renderer_at(k);
-                printf("  %-10s %-16s %s\n", r->id, r->name, r->summary);
-            }
-            exit(0);
-        } else {
-            fprintf(stderr,
-                    "usage: %s [--frames N] [--shot PATH.ppm]\n"
-                    "          [--face ID] [--mood NAME] [--list-faces]\n",
-                    argv[0]);
-            exit(2);
-        }
+        else if (!strcmp(a, "--persona"))
+            o.persona = true;
+        else if (!strcmp(a, "--script")) {
+            o.persona = true;
+            o.script = true;
+        } else
+            usage(argv[0]);
     }
+    if (o.strip_every == 0) o.strip_every = 1;
     return o;
 }
 
@@ -165,48 +214,61 @@ int main(int argc, char **argv) {
     if (nev_board_init() != NEV_OK) return 1;
     if (display_service_init() != NEV_OK) return 1;
 
-    nev_sub_cfg_t cfg = {.name = "boot",
-                         .domains = NEV_DOM(DISPLAY) | NEV_DOM(SYS),
-                         .depth = 8,
-                         .full_policy = NEV_FULL_DROP_OLDEST,
-                         .coalesce = true};
+    const nev_sub_cfg_t cfg = {.name = "shell",
+                               .domains = NEV_DOM(DISPLAY) | NEV_DOM(SYS) | NEV_DOM(PERSONA),
+                               .depth = 8,
+                               .full_policy = NEV_FULL_DROP_OLDEST,
+                               .coalesce = true};
     nev_sub_t *sub = nev_bus_subscribe(&cfg);
     if (!sub) return 1;
 
-    const nev_face_renderer_t *renderer = NULL;
-    if (opt.face_id) {
-        renderer = nev_face_renderer_get(opt.face_id);
-        if (!renderer) {
-            NEV_LOGE(TAG, "unknown face '%s' — try --list-faces", opt.face_id);
-            return 2;
-        }
-        nev_mood_t mood = NEV_MOOD_IDLE;
-        if (opt.mood_name && !nev_mood_from_name(opt.mood_name, &mood)) {
-            NEV_LOGE(TAG, "unknown mood '%s'", opt.mood_name);
-            return 2;
-        }
-        NEV_LOGI(TAG, "face '%s', mood '%s'", renderer->id, nev_mood_name(mood));
-        build_face_screen(renderer, mood);
+    nev_mood_t start_mood = NEV_MOOD_IDLE;
+    if (opt.mood_name && !nev_mood_from_name(opt.mood_name, &start_mood)) {
+        NEV_LOGE(TAG, "unknown mood '%s'", opt.mood_name);
+        return 2;
+    }
+
+    if (opt.persona) {
+        build_persona_screen(start_mood);
     } else {
         build_boot_screen();
         start_arc_animation();
     }
     (void)nev_bus_publish_type(NEV_EVT_SYS_BOOT_DONE, NEV_SRC_KERNEL);
 
+    size_t script_cursor = 0;
+    uint32_t strip_index = 0;
     bool running = true;
+
     while (running) {
+        const uint32_t now_ms = nev_now_ms();
+
+        if (opt.script) run_script(now_ms, &script_cursor);
+        if (opt.persona) nev_persona_tick(now_ms);
+
         running = display_service_frame();
 
         /* Bounded drain: a burst must never eat the frame budget. */
         nev_event_t ev;
         int budget = 8;
         while (budget-- > 0 && nev_bus_recv(sub, &ev, NEV_NO_WAIT)) {
-            if (ev.type == NEV_EVT_DISPLAY_FRAME_STATS && !renderer) apply_frame_stats(&ev.p.frame);
+            if (ev.type == NEV_EVT_DISPLAY_FRAME_STATS && !opt.persona)
+                apply_frame_stats(&ev.p.frame);
+            if (ev.type == NEV_EVT_PERSONA_MOOD_CHANGED && s_mood_label) {
+                lv_label_set_text(s_mood_label, nev_mood_name((nev_mood_t)ev.p.mood.mood));
+                lv_obj_align(s_mood_label, LV_ALIGN_BOTTOM_MID, 0, -16);
+            }
             if (ev.flags & NEV_EVF_BLOB) nev_blob_release(ev.p.blob.handle);
         }
 
         display_stats_t st;
         display_service_stats(&st);
+
+        if (opt.strip_dir && st.frames % opt.strip_every == 0) {
+            char path[512];
+            snprintf(path, sizeof(path), "%s/f%03u.ppm", opt.strip_dir, (unsigned)strip_index++);
+            (void)nev_board_sim_save_ppm(path);
+        }
         if (opt.max_frames && st.frames >= opt.max_frames) running = false;
     }
 
@@ -214,22 +276,15 @@ int main(int argc, char **argv) {
     display_service_stats(&st);
     NEV_LOGI(TAG, "%u frames — avg %u us, worst %u us, %u over budget", (unsigned)st.frames,
              (unsigned)st.avg_us, (unsigned)st.worst_us, (unsigned)st.overruns);
-    NEV_LOGI(TAG, "%u flushes, %u pixels written", (unsigned)nev_board_sim_flush_count(),
-             (unsigned)nev_board_sim_pixels_written());
 
     int rc = 0;
-    if (opt.shot_path && nev_board_sim_save_ppm(opt.shot_path) != NEV_OK) {
-        NEV_LOGE(TAG, "could not write %s", opt.shot_path);
-        rc = 1;
-    }
-
-    /* A run that drew nothing is a failure even if it exited cleanly. */
+    if (opt.shot_path && nev_board_sim_save_ppm(opt.shot_path) != NEV_OK) rc = 1;
     if (nev_board_sim_flush_count() == 0) {
         NEV_LOGE(TAG, "no pixels reached the display — the render path is broken");
         rc = 1;
     }
 
-    if (renderer) renderer->destroy();
+    if (opt.persona) nev_persona_deinit();
     display_service_deinit();
     nev_board_deinit();
     nev_bus_deinit();

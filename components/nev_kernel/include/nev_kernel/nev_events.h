@@ -90,7 +90,6 @@ enum nev_domain_id {
     X(NET, DAEMON_LOST, 0x04)                                                                      \
     /* PERSONA — produced by nev_persona */                                                      \
     X(PERSONA, MOOD_CHANGED, 0x01)                                                                 \
-    X(PERSONA, MOOD_HINT, 0x02)                                                                    \
     X(PERSONA, BLINK, 0x03)                                                                        \
     /* APP — produced by nev_appkit */                                                           \
     X(APP, LAUNCH, 0x01)                                                                           \
@@ -107,6 +106,7 @@ enum nev_domain_id {
     X(BRIDGE, AGENT_TOKEN, 0x06)                                                                   \
     X(BRIDGE, AGENT_DONE, 0x07)                                                                    \
     X(BRIDGE, NOTIFICATION, 0x08)                                                                  \
+    X(BRIDGE, MOOD_HINT, 0x09)                                                                     \
     /* POWER — produced by power_service */                                                      \
     X(POWER, BATTERY, 0x01)                                                                        \
     X(POWER, IDLE_ENTER, 0x02)                                                                     \

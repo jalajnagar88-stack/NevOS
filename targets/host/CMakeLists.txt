@@ -56,8 +56,7 @@ target_link_libraries(nevos_services PUBLIC nevos_core nevos_board lvgl)
 add_library(nevos_persona STATIC
   ${NEV_PERSONA_DIR}/src/face_registry.c
   ${NEV_PERSONA_DIR}/src/face_vector.c
-  ${NEV_PERSONA_DIR}/src/face_full.c
-  ${NEV_PERSONA_DIR}/src/face_orb.c
+  ${NEV_PERSONA_DIR}/src/persona.c
 )
 target_include_directories(nevos_persona PUBLIC ${NEV_PERSONA_INCLUDE_DIRS})
 target_link_libraries(nevos_persona PUBLIC nevos_core lvgl)

@@ -85,9 +85,9 @@ bitmask, so matching is a single `&` — no string topics, no list walking.
 | `DISPLAY` | `0x03` | `display_service` | `FRAME_BEGIN`, `FRAME_STATS`, `BACKLIGHT_CHANGED` |
 | `AUDIO` | `0x04` | `audio_service` | `CAPTURE_START/STOP`, `CHUNK`, `VAD_BEGIN/END`, `PLAY_DONE` |
 | `NET` | `0x05` | `net_service` | `WIFI_UP/DOWN`, `DAEMON_FOUND`, `DAEMON_LOST` |
-| `PERSONA` | `0x06` | `nev_persona` | `MOOD_CHANGED`, `MOOD_HINT`, `BLINK` |
+| `PERSONA` | `0x06` | `nev_persona` | `MOOD_CHANGED`, `BLINK` |
 | `APP` | `0x07` | `nev_appkit` | `LAUNCH`, `SUSPEND`, `RESUME`, `CLOSE`, `NAV_HOME` |
-| `BRIDGE` | `0x08` | `nev_bridge` | `PAIRED`, `TRANSCRIPT_PARTIAL/FINAL`, `AGENT_TOKEN`, `AGENT_DONE`, `NOTIFICATION` |
+| `BRIDGE` | `0x08` | `nev_bridge` | `PAIRED`, `TRANSCRIPT_PARTIAL/FINAL`, `AGENT_TOKEN`, `AGENT_DONE`, `NOTIFICATION`, `MOOD_HINT` |
 | `POWER` | `0x09` | `power_service` | `BATTERY`, `IDLE_ENTER/EXIT`, `CHARGING` |
 | `STORAGE` | `0x0A` | `nev_store` | `SETTING_CHANGED`, `FS_READY` |
 | `GAME` | `0x0B` | `game_engine` | `SCORE`, `GAME_OVER`, `HIGHSCORE_BEAT` |
