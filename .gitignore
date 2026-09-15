@@ -9,3 +9,5 @@ target/
 *.a
 .DS_Store
 compile_commands.json
+*.ppm
+shots/

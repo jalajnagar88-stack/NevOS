@@ -1,0 +1,32 @@
+# Shared host-build definitions for the simulator and the test suite.
+#
+# Defines:
+#   nevos_core   — L-1 (nev_port, host impl) + L1 (nev_kernel). No display, no
+#                  SDL2, no RTOS. This is what unit tests link against.
+#   nevos_warnings — the warning contract, applied to every NEVOS target.
+
+get_filename_component(NEVOS_ROOT ${CMAKE_CURRENT_LIST_DIR}/.. ABSOLUTE)
+
+include(${NEVOS_ROOT}/components/nev_port/sources.cmake)
+include(${NEVOS_ROOT}/components/nev_kernel/sources.cmake)
+
+add_library(nevos_warnings INTERFACE)
+target_compile_options(nevos_warnings INTERFACE
+  -Wall -Wextra -Wshadow -Wpointer-arith -Wcast-qual
+  -Wstrict-prototypes -Wmissing-prototypes -Wno-unused-parameter
+  $<$<BOOL:${NEVOS_WERROR}>:-Werror>
+)
+
+add_library(nevos_core STATIC
+  ${NEV_PORT_HOST_SRCS}
+  ${NEV_KERNEL_SRCS}
+)
+target_include_directories(nevos_core PUBLIC
+  ${NEV_PORT_INCLUDE_DIRS}
+  ${NEV_KERNEL_INCLUDE_DIRS}
+)
+set_target_properties(nevos_core PROPERTIES C_STANDARD 11 C_EXTENSIONS ON)
+target_link_libraries(nevos_core PUBLIC nevos_warnings)
+
+find_package(Threads REQUIRED)
+target_link_libraries(nevos_core PUBLIC Threads::Threads)
