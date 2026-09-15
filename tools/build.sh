@@ -6,7 +6,8 @@
 #   ./tools/build.sh test        host unit tests
 #   ./tools/build.sh lint        layering rules from ARCHITECTURE.md §9
 #   ./tools/build.sh format      apply clang-format
-#   ./tools/build.sh check       lint + format-check + test + both host builds
+#   ./tools/build.sh asan        every screen under AddressSanitizer
+#   ./tools/build.sh check       lint + format + test + asan + both host builds
 #   ./tools/build.sh device      ESP32-S3 firmware (needs ESP-IDF on PATH)
 set -euo pipefail
 
@@ -49,6 +50,27 @@ case "${1:-check}" in
     ctest --test-dir build/tests --output-on-failure
     ;;
 
+  asan)
+    # Runs every screen under AddressSanitizer. This is not optional polish:
+    # it is what caught a NULL label dereference that only appeared thirty
+    # frames in, because the event that triggered it is published once a second.
+    need_submodules
+    cmake -S targets/host -B build/asan $GEN -DNEVOS_DISPLAY=headless \
+      -DCMAKE_BUILD_TYPE=Debug \
+      -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+      -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+    BUILD build/asan
+    S=$(mktemp)
+    for mode in "" "--app settings" "--app clock" "--persona --script" "--boot"; do
+      echo "==> asan: nevos_sim ${mode:-<shell>}"
+      rm -f "$S"
+      # shellcheck disable=SC2086
+      ./build/asan/nevos_sim --settings "$S" $mode --frames 120
+    done
+    rm -f "$S"
+    echo "asan: clean"
+    ;;
+
   lint)
     python3 tools/ci/lint_layers.py
     ;;
@@ -79,6 +101,7 @@ case "${1:-check}" in
     "$0" format-check
     "$0" test
     "$0" headless 60 build/shot
+    "$0" asan
     cmake -S targets/host -B build/host $GEN -DNEVOS_DISPLAY=sdl2 -DCMAKE_BUILD_TYPE=Debug >/dev/null
     BUILD build/host
     echo

@@ -43,6 +43,9 @@ jobs:
       - name: Simulator — headless render
         run: ./tools/build.sh headless 90 build/shot
 
+      - name: Sanitizers
+        run: ./tools/build.sh asan
+
       - name: Simulator — SDL2 build
         run: |
           cmake -S targets/host -B build/host -GNinja -DNEVOS_DISPLAY=sdl2

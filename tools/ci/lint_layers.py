@@ -25,12 +25,10 @@ LAYER = {
 }
 PEER_ISOLATION_FROM = 3
 
-# Only these paths may speak to the vendor SDK or name a GPIO.
-PLATFORM_PATHS = (
-    "components/nev_port/src/esp32s3/",
-    "components/nev_board/src/esp32s3/",
-    "targets/esp32s3/",
-)
+# Only these paths may speak to the vendor SDK or name a GPIO: any component's
+# per-target implementation directory, plus the firmware project itself.
+PLATFORM_DIR = "/src/esp32s3/"
+PLATFORM_PATHS = ("targets/esp32s3/",)
 PIN_PATHS = ("boards/",)
 
 VENDOR_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]((?:esp_|driver/|freertos/|hal/|soc/)[^">]*)[">]', re.M)
@@ -66,7 +64,7 @@ def component_of(path):
 
 def check(path, text, errors):
     r = rel(path)
-    is_platform = any(r.startswith(x) for x in PLATFORM_PATHS)
+    is_platform = PLATFORM_DIR in ("/" + r) or any(r.startswith(x) for x in PLATFORM_PATHS)
     is_pin_file = any(r.startswith(x) for x in PIN_PATHS)
     comp = component_of(r)
 

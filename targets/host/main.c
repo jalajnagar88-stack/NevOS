@@ -1,32 +1,37 @@
 /*
  * NEVOS simulator entry point.
  *
- * Two screens:
- *   default    the M1 boot screen — wordmark, spinning arc, live frame counter
+ * Three screens:
+ *   default    the M3 shell — status bar, home grid, apps
  *   --persona  the M2 face, driven by the mood machine
+ *   --boot     the M1 boot screen — wordmark, spinning arc, frame counter
  *
- * In both cases the thing on screen is fed by bus traffic rather than by
- * reaching into a service, so the running simulator demonstrates the event bus
- * and not only the test suite does.
+ * In every case what is on screen is fed by bus traffic rather than by reaching
+ * into a service, so the running simulator demonstrates the event bus and not
+ * only the test suite does.
  *
- *   build/host/nevos_sim                          boot screen, window
- *   build/host/nevos_sim --persona                the face, interactive
- *   build/host/nevos_sim --persona --script       a scripted event sequence
- *   build/host/nevos_sim --persona --mood sleepy --frames 90 --shot out.ppm
+ *   build/host/nevos_sim                          the shell
+ *   build/host/nevos_sim --app settings           straight into an app
+ *   build/host/nevos_sim --persona --script       the face, scripted events
+ *   build/host/nevos_sim --boot --frames 90 --shot out.ppm
  */
 #include "nev_board/board_sim.h"
 #include "nev_kernel/nev_blob.h"
 #include "nev_kernel/nev_bus.h"
+#include "nev_appkit/shell.h"
+#include "nev_kernel/nev_store.h"
 #include "nev_persona/persona.h"
 #include "nev_port/nev_assert.h"
 #include "nev_port/nev_log.h"
 #include "nev_port/nev_mem.h"
 #include "nev_port/nev_time.h"
 #include "nev_services/display_service.h"
+#include "nev_services/input_service.h"
 #include "lvgl.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define TAG          "nevos"
 
@@ -101,6 +106,14 @@ static void start_arc_animation(void) {
 }
 
 static void apply_frame_stats(const nev_p_frame_t *f) {
+    /*
+     * Only the boot screen owns this label. Guarding here rather than trusting
+     * every call site: FRAME_STATS is published once a second, so a caller that
+     * forgets crashes about thirty frames in, which is long enough after start
+     * to look like something else entirely.
+     */
+    if (!s_counter_label) return;
+
     lv_label_set_text_fmt(s_counter_label, "frame %u  " LV_SYMBOL_BULLET "  %u.%u fps",
                           (unsigned)f->frame, (unsigned)(f->fps_q4 / 16u),
                           (unsigned)((f->fps_q4 % 16u) * 10u / 16u));
@@ -165,13 +178,17 @@ typedef struct {
     const char *strip_dir;
     uint32_t strip_every;
     bool persona;
+    bool boot;
     bool script;
     const char *mood_name;
+    const char *app_id;
+    const char *settings_path;
 } options_t;
 
 static void usage(const char *argv0) {
     fprintf(stderr,
-            "usage: %s [--persona] [--script] [--mood NAME]\n"
+            "usage: %s [--persona] [--boot] [--script] [--mood NAME]\n"
+            "          [--app ID] [--settings PATH]\n"
             "          [--frames N] [--shot PATH.ppm]\n"
             "          [--strip DIR] [--strip-every N]\n",
             argv0);
@@ -194,6 +211,12 @@ static options_t parse_args(int argc, char **argv) {
             o.mood_name = argv[++i];
         else if (!strcmp(a, "--persona"))
             o.persona = true;
+        else if (!strcmp(a, "--boot"))
+            o.boot = true;
+        else if (!strcmp(a, "--app") && i + 1 < argc)
+            o.app_id = argv[++i];
+        else if (!strcmp(a, "--settings") && i + 1 < argc)
+            o.settings_path = argv[++i];
         else if (!strcmp(a, "--script")) {
             o.persona = true;
             o.script = true;
@@ -211,8 +234,20 @@ int main(int argc, char **argv) {
 
     if (nev_bus_init() != NEV_OK) return 1;
     if (nev_blob_pool_init() != NEV_OK) return 1;
+    if (nev_store_init(opt.settings_path ? opt.settings_path : "nevos-settings.txt") != NEV_OK)
+        return 1;
     if (nev_board_init() != NEV_OK) return 1;
     if (display_service_init() != NEV_OK) return 1;
+    if (input_service_init() != NEV_OK) return 1;
+
+    /*
+     * The simulator knows what time it is; the device does not until the daemon
+     * tells it at M6. Seeding it here means the shell and clock can be seen
+     * working without pretending the device has an RTC it does not have.
+     */
+    nev_wallclock_set((uint64_t)time(NULL));
+
+    (void)nev_store_set_num(NEV_SET_BOOT_COUNT, nev_store_num(NEV_SET_BOOT_COUNT) + 1);
 
     const nev_sub_cfg_t cfg = {.name = "shell",
                                .domains = NEV_DOM(DISPLAY) | NEV_DOM(SYS) | NEV_DOM(PERSONA),
@@ -228,8 +263,15 @@ int main(int argc, char **argv) {
         return 2;
     }
 
+    const bool shell_mode = !opt.persona && !opt.boot;
     if (opt.persona) {
         build_persona_screen(start_mood);
+    } else if (shell_mode) {
+        if (nev_shell_init(lv_screen_active()) != NEV_OK) return 1;
+        if (opt.app_id && nev_shell_launch(opt.app_id) != NEV_OK) {
+            NEV_LOGE(TAG, "no app '%s'", opt.app_id);
+            return 2;
+        }
     } else {
         build_boot_screen();
         start_arc_animation();
@@ -244,7 +286,10 @@ int main(int argc, char **argv) {
         const uint32_t now_ms = nev_now_ms();
 
         if (opt.script) run_script(now_ms, &script_cursor);
+        input_service_poll(now_ms);
+        nev_store_tick(now_ms);
         if (opt.persona) nev_persona_tick(now_ms);
+        if (shell_mode) nev_shell_tick(now_ms);
 
         running = display_service_frame();
 
@@ -252,8 +297,7 @@ int main(int argc, char **argv) {
         nev_event_t ev;
         int budget = 8;
         while (budget-- > 0 && nev_bus_recv(sub, &ev, NEV_NO_WAIT)) {
-            if (ev.type == NEV_EVT_DISPLAY_FRAME_STATS && !opt.persona)
-                apply_frame_stats(&ev.p.frame);
+            if (ev.type == NEV_EVT_DISPLAY_FRAME_STATS) apply_frame_stats(&ev.p.frame);
             if (ev.type == NEV_EVT_PERSONA_MOOD_CHANGED && s_mood_label) {
                 lv_label_set_text(s_mood_label, nev_mood_name((nev_mood_t)ev.p.mood.mood));
                 lv_obj_align(s_mood_label, LV_ALIGN_BOTTOM_MID, 0, -16);
@@ -285,6 +329,9 @@ int main(int argc, char **argv) {
     }
 
     if (opt.persona) nev_persona_deinit();
+    if (shell_mode) nev_shell_deinit();
+    nev_store_deinit();
+    input_service_deinit();
     display_service_deinit();
     nev_board_deinit();
     nev_bus_deinit();

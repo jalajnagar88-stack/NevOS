@@ -125,6 +125,54 @@ pathological. Any future rotated or scaled object should be checked against
 
 ---
 
+## M3 — shell, settings, clock
+
+### Internal SRAM
+
+| Item | Bytes | Note |
+|---|---|---|
+| Settings store | 1,216 | 16 settings x (uint32 + 64-byte string + flag) |
+| App registry | 192 | 24 descriptor pointers |
+| Shell live slots | ~80 | 3 slots |
+| **New this milestone** | **~1.5 KB** | |
+| **Committed total** | **~398 KB** | of 512 KB |
+
+Negligible against the framebuffer strips and the LVGL pool. The app framework
+costs almost nothing in static memory; what it costs is LVGL objects, which come
+out of `LV_MEM_SIZE` and scale with how many apps are kept warm.
+
+`NEV_SHELL_MAX_LIVE` is 3 — one foreground and two suspended — precisely so
+that number stays bounded.
+
+### Frame time
+
+| Screen | Average | Worst | Measured where |
+|---|---|---|---|
+| Shell (home grid) | 9 us | 831 us | **host x86, headless** |
+| Settings | 17 us | 1,508 us | **host x86, headless** |
+| Clock | 23 us | 1,627 us | **host x86, headless** |
+| Persona face | 1,084 us | 2,392 us | **host x86, headless** |
+
+The shell is nearly free, because a static grid of tiles redraws nothing
+between frames — LVGL's dirty-rectangle tracking does exactly what ADR 0005
+assumes it will. The clock costs more than settings only because its ring
+advances every second.
+
+**The face remains the expensive screen by two orders of magnitude**, and it is
+still the number to carry into M5. Everything the shell adds is noise beside it.
+
+The clock repaints on a second boundary rather than per frame. At 30 fps the
+naive version would redraw an unchanged string 29 times a second, and every one
+of those dirties a rectangle that then has to be flushed to PSRAM.
+
+### Flash
+
+Still not measured: the ESP-IDF build needs the Xtensa toolchain, which this
+environment's network policy cannot reach. First real number comes from a
+device build.
+
+---
+
 ## Method
 
 Internal and PSRAM figures come from `sizeof` and from the allocation sites,

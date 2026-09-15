@@ -7,6 +7,7 @@ set(NEV_PORT_DIR ${CMAKE_CURRENT_LIST_DIR})
 set(NEV_PORT_COMMON_SRCS
   ${NEV_PORT_DIR}/src/common/nev_err.c
   ${NEV_PORT_DIR}/src/common/nev_log.c
+  ${NEV_PORT_DIR}/src/common/nev_wallclock.c
 )
 
 set(NEV_PORT_HOST_SRCS

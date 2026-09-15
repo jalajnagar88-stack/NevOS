@@ -17,6 +17,8 @@ get_filename_component(NEVOS_ROOT ${CMAKE_CURRENT_LIST_DIR}/../.. ABSOLUTE)
 include(${NEVOS_ROOT}/cmake/nevos_host.cmake)
 include(${NEVOS_ROOT}/components/nev_board/sources.cmake)
 include(${NEVOS_ROOT}/components/nev_services/sources.cmake)
+include(${NEVOS_ROOT}/components/nev_appkit/sources.cmake)
+include(${NEVOS_ROOT}/apps/sources.cmake)
 
 if(NOT EXISTS ${NEVOS_ROOT}/third_party/lvgl/lvgl.h)
   message(FATAL_ERROR "LVGL is missing. Run: git submodule update --init --recursive")
@@ -61,9 +63,31 @@ add_library(nevos_persona STATIC
 target_include_directories(nevos_persona PUBLIC ${NEV_PERSONA_INCLUDE_DIRS})
 target_link_libraries(nevos_persona PUBLIC nevos_core lvgl)
 
+# ------------------------------------------------------------------- appkit
+add_library(nevos_appkit STATIC ${NEV_APPKIT_SRCS})
+target_include_directories(nevos_appkit PUBLIC ${NEV_APPKIT_INCLUDE_DIRS})
+target_link_libraries(nevos_appkit PUBLIC nevos_core lvgl)
+
+# ---------------------------------------------------------------------- apps
+# Apps self-register from constructors, so the linker must not discard them for
+# having no referenced symbol. Whole-archive is what keeps "adding an app is
+# adding a folder" true.
+add_library(nevos_apps STATIC ${NEV_APP_SRCS})
+target_link_libraries(nevos_apps PUBLIC nevos_appkit)
+
 # ----------------------------------------------------------------- simulator
 add_executable(nevos_sim main.c)
-target_link_libraries(nevos_sim PRIVATE nevos_services nevos_persona nevos_board nevos_core lvgl)
+target_link_libraries(nevos_sim PRIVATE
+  nevos_services nevos_persona nevos_appkit nevos_board nevos_core lvgl)
+
+# Force-link the apps archive so self-registering translation units survive.
+if(APPLE)
+  target_link_libraries(nevos_sim PRIVATE -Wl,-force_load,$<TARGET_FILE:nevos_apps>)
+else()
+  target_link_libraries(nevos_sim PRIVATE
+    -Wl,--whole-archive $<TARGET_FILE:nevos_apps> -Wl,--no-whole-archive)
+endif()
+add_dependencies(nevos_sim nevos_apps)
 set_target_properties(nevos_sim PROPERTIES C_STANDARD 11 C_EXTENSIONS ON)
 
 message(STATUS "NEVOS: board=${NEVOS_BOARD} display=${NEVOS_DISPLAY}")
