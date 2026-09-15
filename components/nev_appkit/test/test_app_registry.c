@@ -23,8 +23,12 @@ static nev_app_desc_t make(const char *id, nev_app_category_t cat) {
     return d;
 }
 
-void setUp(void) { nev_app_registry_reset(); }
-void tearDown(void) { nev_app_registry_reset(); }
+void setUp(void) {
+    nev_app_registry_reset();
+}
+void tearDown(void) {
+    nev_app_registry_reset();
+}
 
 static void test_registration_and_lookup(void) {
     static nev_app_desc_t a, b;
@@ -96,7 +100,7 @@ static void test_ordering_groups_by_category_and_is_stable(void) {
     nev_app_register(&s2);
 
     const nev_app_desc_t *out[8];
-    const size_t          n = nev_app_ordered(out, 8);
+    const size_t n = nev_app_ordered(out, 8);
     TEST_ASSERT_EQUAL_UINT32(5, (uint32_t)n);
 
     TEST_ASSERT_EQUAL_STRING("snake", out[0]->id);
