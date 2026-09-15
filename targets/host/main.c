@@ -14,9 +14,11 @@
 #include "nev_board/board_sim.h"
 #include "nev_kernel/nev_blob.h"
 #include "nev_kernel/nev_bus.h"
+#include "nev_port/nev_assert.h"
 #include "nev_port/nev_log.h"
 #include "nev_port/nev_mem.h"
 #include "nev_port/nev_time.h"
+#include "nev_persona/face.h"
 #include "nev_services/display_service.h"
 #include "lvgl.h"
 #include <stdio.h>
@@ -100,9 +102,29 @@ static void apply_frame_stats(const nev_p_frame_t *f) {
     lv_obj_align(s_counter_label, LV_ALIGN_CENTER, 0, 62);
 }
 
+static void build_face_screen(const nev_face_renderer_t *renderer, nev_mood_t mood) {
+    lv_obj_t *screen = lv_screen_active();
+    lv_obj_set_style_bg_color(screen, COLOR_BG, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_remove_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
+
+    NEV_CHECK(renderer->create(screen) == NEV_OK);
+    renderer->apply(nev_face_preset(mood));
+
+    /* Self-labelled so a contact sheet of these needs no external annotation. */
+    lv_obj_t *caption = lv_label_create(screen);
+    lv_label_set_text_fmt(caption, "%s  %s  %s", renderer->id, LV_SYMBOL_BULLET,
+                          nev_mood_name(mood));
+    lv_obj_set_style_text_color(caption, COLOR_MUTED, LV_PART_MAIN);
+    lv_obj_align(caption, LV_ALIGN_BOTTOM_MID, 0, -16);
+    lv_obj_move_foreground(caption);
+}
+
 typedef struct {
     uint32_t max_frames; /* 0 = run until the window closes */
     const char *shot_path;
+    const char *face_id;   /* NULL renders the boot screen instead */
+    const char *mood_name; /* NULL means idle                      */
 } options_t;
 
 static options_t parse_args(int argc, char **argv) {
@@ -112,8 +134,21 @@ static options_t parse_args(int argc, char **argv) {
             o.max_frames = (uint32_t)strtoul(argv[++i], NULL, 10);
         } else if (strcmp(argv[i], "--shot") == 0 && i + 1 < argc) {
             o.shot_path = argv[++i];
+        } else if (strcmp(argv[i], "--face") == 0 && i + 1 < argc) {
+            o.face_id = argv[++i];
+        } else if (strcmp(argv[i], "--mood") == 0 && i + 1 < argc) {
+            o.mood_name = argv[++i];
+        } else if (strcmp(argv[i], "--list-faces") == 0) {
+            for (size_t k = 0; k < nev_face_renderer_count(); k++) {
+                const nev_face_renderer_t *r = nev_face_renderer_at(k);
+                printf("  %-10s %-16s %s\n", r->id, r->name, r->summary);
+            }
+            exit(0);
         } else {
-            fprintf(stderr, "usage: %s [--frames N] [--shot PATH.ppm]\n", argv[0]);
+            fprintf(stderr,
+                    "usage: %s [--frames N] [--shot PATH.ppm]\n"
+                    "          [--face ID] [--mood NAME] [--list-faces]\n",
+                    argv[0]);
             exit(2);
         }
     }
@@ -138,8 +173,24 @@ int main(int argc, char **argv) {
     nev_sub_t *sub = nev_bus_subscribe(&cfg);
     if (!sub) return 1;
 
-    build_boot_screen();
-    start_arc_animation();
+    const nev_face_renderer_t *renderer = NULL;
+    if (opt.face_id) {
+        renderer = nev_face_renderer_get(opt.face_id);
+        if (!renderer) {
+            NEV_LOGE(TAG, "unknown face '%s' — try --list-faces", opt.face_id);
+            return 2;
+        }
+        nev_mood_t mood = NEV_MOOD_IDLE;
+        if (opt.mood_name && !nev_mood_from_name(opt.mood_name, &mood)) {
+            NEV_LOGE(TAG, "unknown mood '%s'", opt.mood_name);
+            return 2;
+        }
+        NEV_LOGI(TAG, "face '%s', mood '%s'", renderer->id, nev_mood_name(mood));
+        build_face_screen(renderer, mood);
+    } else {
+        build_boot_screen();
+        start_arc_animation();
+    }
     (void)nev_bus_publish_type(NEV_EVT_SYS_BOOT_DONE, NEV_SRC_KERNEL);
 
     bool running = true;
@@ -150,7 +201,7 @@ int main(int argc, char **argv) {
         nev_event_t ev;
         int budget = 8;
         while (budget-- > 0 && nev_bus_recv(sub, &ev, NEV_NO_WAIT)) {
-            if (ev.type == NEV_EVT_DISPLAY_FRAME_STATS) apply_frame_stats(&ev.p.frame);
+            if (ev.type == NEV_EVT_DISPLAY_FRAME_STATS && !renderer) apply_frame_stats(&ev.p.frame);
             if (ev.flags & NEV_EVF_BLOB) nev_blob_release(ev.p.blob.handle);
         }
 
@@ -178,6 +229,7 @@ int main(int argc, char **argv) {
         rc = 1;
     }
 
+    if (renderer) renderer->destroy();
     display_service_deinit();
     nev_board_deinit();
     nev_bus_deinit();

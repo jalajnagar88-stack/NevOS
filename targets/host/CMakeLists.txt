@@ -51,9 +51,20 @@ add_library(nevos_services STATIC ${NEV_SERVICES_SRCS})
 target_include_directories(nevos_services PUBLIC ${NEV_SERVICES_INCLUDE_DIRS})
 target_link_libraries(nevos_services PUBLIC nevos_core nevos_board lvgl)
 
+# ------------------------------------------------------------------- persona
+# The renderers only; the parameter model is already in nevos_core.
+add_library(nevos_persona STATIC
+  ${NEV_PERSONA_DIR}/src/face_registry.c
+  ${NEV_PERSONA_DIR}/src/face_vector.c
+  ${NEV_PERSONA_DIR}/src/face_full.c
+  ${NEV_PERSONA_DIR}/src/face_orb.c
+)
+target_include_directories(nevos_persona PUBLIC ${NEV_PERSONA_INCLUDE_DIRS})
+target_link_libraries(nevos_persona PUBLIC nevos_core lvgl)
+
 # ----------------------------------------------------------------- simulator
 add_executable(nevos_sim main.c)
-target_link_libraries(nevos_sim PRIVATE nevos_services nevos_board nevos_core lvgl)
+target_link_libraries(nevos_sim PRIVATE nevos_services nevos_persona nevos_board nevos_core lvgl)
 set_target_properties(nevos_sim PROPERTIES C_STANDARD 11 C_EXTENSIONS ON)
 
 message(STATUS "NEVOS: board=${NEVOS_BOARD} display=${NEVOS_DISPLAY}")

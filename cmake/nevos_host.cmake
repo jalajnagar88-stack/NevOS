@@ -9,6 +9,7 @@ get_filename_component(NEVOS_ROOT ${CMAKE_CURRENT_LIST_DIR}/.. ABSOLUTE)
 
 include(${NEVOS_ROOT}/components/nev_port/sources.cmake)
 include(${NEVOS_ROOT}/components/nev_kernel/sources.cmake)
+include(${NEVOS_ROOT}/components/nev_persona/sources.cmake)
 
 add_library(nevos_warnings INTERFACE)
 target_compile_options(nevos_warnings INTERFACE
@@ -17,14 +18,20 @@ target_compile_options(nevos_warnings INTERFACE
   $<$<BOOL:${NEVOS_WERROR}>:-Werror>
 )
 
+# The face's parameter model is pure data and has no LVGL dependency, so it
+# belongs in the toolkit-free core that unit tests link against. The renderers
+# that draw it do not.
 add_library(nevos_core STATIC
   ${NEV_PORT_HOST_SRCS}
   ${NEV_KERNEL_SRCS}
+  ${NEV_PERSONA_DIR}/src/face_presets.c
 )
 target_include_directories(nevos_core PUBLIC
   ${NEV_PORT_INCLUDE_DIRS}
   ${NEV_KERNEL_INCLUDE_DIRS}
+  ${NEV_PERSONA_INCLUDE_DIRS}
 )
+target_link_libraries(nevos_core PUBLIC m)
 set_target_properties(nevos_core PROPERTIES C_STANDARD 11 C_EXTENSIONS ON)
 target_link_libraries(nevos_core PUBLIC nevos_warnings)
 

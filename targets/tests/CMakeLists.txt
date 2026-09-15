@@ -18,7 +18,7 @@ target_compile_definitions(unity PUBLIC UNITY_INCLUDE_DOUBLE UNITY_OUTPUT_COLOR)
 
 enable_testing()
 
-foreach(src ${NEV_KERNEL_TEST_SRCS})
+foreach(src ${NEV_KERNEL_TEST_SRCS} ${NEV_PERSONA_TEST_SRCS})
   get_filename_component(name ${src} NAME_WE)
   add_executable(${name} ${src})
   target_link_libraries(${name} PRIVATE nevos_core unity)
