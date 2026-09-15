@@ -24,9 +24,11 @@ void tearDown(void) {
 
 static nev_sub_t *sub_named(const char *name, uint32_t domains, uint8_t depth,
                             nev_full_policy_t policy, bool coalesce) {
-    nev_sub_cfg_t cfg = {
-        .name = name, .domains = domains, .depth = depth, .full_policy = policy,
-        .coalesce = coalesce};
+    nev_sub_cfg_t cfg = {.name = name,
+                         .domains = domains,
+                         .depth = depth,
+                         .full_policy = policy,
+                         .coalesce = coalesce};
     nev_sub_t *s = nev_bus_subscribe(&cfg);
     TEST_ASSERT_NOT_NULL(s);
     return s;
@@ -42,7 +44,7 @@ static void publish_touch(int16_t x, int16_t y) {
 /* ------------------------------------------------------------ basic delivery */
 
 static void test_publish_then_receive_round_trips_the_payload(void) {
-    nev_sub_t  *s = sub_named("ui", NEV_DOM(INPUT), 8, NEV_FULL_DROP_NEWEST, false);
+    nev_sub_t *s = sub_named("ui", NEV_DOM(INPUT), 8, NEV_FULL_DROP_NEWEST, false);
     publish_touch(120, 240);
 
     nev_event_t got;
@@ -69,7 +71,7 @@ static void test_bus_stamps_sequence_and_timestamp(void) {
 }
 
 static void test_recv_on_empty_queue_times_out_without_blocking_forever(void) {
-    nev_sub_t  *s = sub_named("ui", NEV_DOM(INPUT), 4, NEV_FULL_DROP_NEWEST, false);
+    nev_sub_t *s = sub_named("ui", NEV_DOM(INPUT), 4, NEV_FULL_DROP_NEWEST, false);
     nev_event_t got;
 
     TEST_ASSERT_FALSE(nev_bus_recv(s, &got, NEV_NO_WAIT));
@@ -115,7 +117,8 @@ static void test_one_event_fans_out_to_every_matching_subscriber(void) {
 /* FIFO per publisher-subscriber pair is the ordering guarantee handlers rely on. */
 static void test_delivery_is_fifo_for_a_single_publisher(void) {
     nev_sub_t *s = sub_named("ui", NEV_DOM(INPUT), 16, NEV_FULL_DROP_NEWEST, false);
-    for (int16_t i = 0; i < 10; i++) publish_touch(i, 0);
+    for (int16_t i = 0; i < 10; i++)
+        publish_touch(i, 0);
 
     nev_event_t got;
     for (int16_t i = 0; i < 10; i++) {
@@ -128,7 +131,8 @@ static void test_delivery_is_fifo_for_a_single_publisher(void) {
 
 static void test_drop_newest_keeps_the_oldest_events(void) {
     nev_sub_t *s = sub_named("slow", NEV_DOM(INPUT), 4, NEV_FULL_DROP_NEWEST, false);
-    for (int16_t i = 0; i < 4; i++) publish_touch(i, 0);
+    for (int16_t i = 0; i < 4; i++)
+        publish_touch(i, 0);
 
     /* Publishing into a full ring reports the drop but does not fail the caller. */
     nev_event_t ev = nev_event_make(NEV_EVT_INPUT_TOUCH, NEV_SRC_INPUT);
@@ -151,7 +155,8 @@ static void test_drop_newest_keeps_the_oldest_events(void) {
 
 static void test_drop_oldest_keeps_the_latest_events(void) {
     nev_sub_t *s = sub_named("state", NEV_DOM(INPUT), 4, NEV_FULL_DROP_OLDEST, false);
-    for (int16_t i = 0; i < 7; i++) publish_touch(i, 0);
+    for (int16_t i = 0; i < 7; i++)
+        publish_touch(i, 0);
 
     /* Three evicted; the ring should hold 3,4,5,6. */
     nev_event_t got;
@@ -170,7 +175,8 @@ static void test_drop_oldest_keeps_the_latest_events(void) {
 static void test_coalescing_replaces_rather_than_queues(void) {
     nev_sub_t *s = sub_named("ui", NEV_DOM(INPUT), 8, NEV_FULL_DROP_NEWEST, true);
 
-    for (int16_t i = 0; i < 20; i++) publish_touch(i, 0);
+    for (int16_t i = 0; i < 20; i++)
+        publish_touch(i, 0);
 
     nev_sub_stats_t ss;
     nev_sub_stats(s, &ss);
@@ -198,7 +204,7 @@ static void test_coalescing_does_not_merge_different_types(void) {
 /* ------------------------------------------------------- blob ownership */
 
 static nev_blob_t make_blob(const char *text) {
-    uint8_t   *buf = NULL;
+    uint8_t *buf = NULL;
     nev_blob_t h = nev_blob_alloc(strlen(text) + 1, &buf);
     TEST_ASSERT_NOT_EQUAL(NEV_BLOB_NONE, h);
     memcpy(buf, text, strlen(text) + 1);
@@ -257,7 +263,7 @@ static void test_eviction_releases_the_evicted_events_blob(void) {
     nev_blob_t first = make_blob("one");
     nev_blob_retain(first);
     TEST_ASSERT_EQUAL_INT(NEV_OK, publish_blob(first));
-    nev_blob_release(first); /* publisher's own reference */
+    nev_blob_release(first);                               /* publisher's own reference */
     TEST_ASSERT_EQUAL_UINT32(2, nev_blob_refcount(first)); /* test + queued event */
 
     for (int i = 0; i < 3; i++) {
@@ -275,7 +281,8 @@ static void test_eviction_releases_the_evicted_events_blob(void) {
 
     nev_blob_release(first);
     nev_event_t got;
-    while (nev_bus_recv(s, &got, NEV_NO_WAIT)) nev_blob_release(got.p.blob.handle);
+    while (nev_bus_recv(s, &got, NEV_NO_WAIT))
+        nev_blob_release(got.p.blob.handle);
     TEST_ASSERT_TRUE(nev_blob_all_free());
 }
 
@@ -346,8 +353,7 @@ static void test_invalid_subscriptions_are_refused(void) {
     nev_sub_cfg_t bad_depth = {.name = "x", .domains = NEV_DOM(SYS), .depth = 0};
     TEST_ASSERT_NULL(nev_bus_subscribe(&bad_depth));
 
-    nev_sub_cfg_t too_deep = {
-        .name = "x", .domains = NEV_DOM(SYS), .depth = NEV_BUS_MAX_DEPTH + 1};
+    nev_sub_cfg_t too_deep = {.name = "x", .domains = NEV_DOM(SYS), .depth = NEV_BUS_MAX_DEPTH + 1};
     TEST_ASSERT_NULL(nev_bus_subscribe(&too_deep));
 
     nev_sub_cfg_t no_domains = {.name = "x", .domains = NEV_DOM_NONE, .depth = 4};
@@ -373,8 +379,8 @@ static void test_long_subscriber_name_is_truncated_not_overflowed(void) {
 
 /* -------------------------------------------------------------- concurrency */
 
-#define PUBLISHERS       4
-#define EVENTS_PER_TASK  500
+#define PUBLISHERS      4
+#define EVENTS_PER_TASK 500
 
 static nev_atomic_u32_t s_publishers_done;
 
@@ -403,12 +409,14 @@ static void test_concurrent_publishers_lose_nothing_unaccounted(void) {
         TEST_ASSERT_EQUAL_INT(NEV_OK, nev_task_create(&tasks[i], &cfg));
     }
 
-    uint32_t    drained = 0;
+    uint32_t drained = 0;
     nev_event_t got;
     while (nev_atomic_load(&s_publishers_done) < PUBLISHERS) {
-        while (nev_bus_recv(s, &got, 1)) drained++;
+        while (nev_bus_recv(s, &got, 1))
+            drained++;
     }
-    while (nev_bus_recv(s, &got, NEV_NO_WAIT)) drained++;
+    while (nev_bus_recv(s, &got, NEV_NO_WAIT))
+        drained++;
 
     nev_sub_stats_t ss;
     nev_sub_stats(s, &ss);

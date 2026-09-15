@@ -3,11 +3,15 @@
 #include "unity.h"
 #include <string.h>
 
-void setUp(void) { TEST_ASSERT_EQUAL_INT(NEV_OK, nev_blob_pool_init()); }
-void tearDown(void) { nev_blob_pool_deinit(); }
+void setUp(void) {
+    TEST_ASSERT_EQUAL_INT(NEV_OK, nev_blob_pool_init());
+}
+void tearDown(void) {
+    nev_blob_pool_deinit();
+}
 
 static void test_alloc_gives_a_writable_buffer_with_one_reference(void) {
-    uint8_t   *buf = NULL;
+    uint8_t *buf = NULL;
     nev_blob_t h = nev_blob_alloc(100, &buf);
     TEST_ASSERT_NOT_EQUAL(NEV_BLOB_NONE, h);
     TEST_ASSERT_NOT_NULL(buf);
@@ -77,7 +81,8 @@ static void test_exhaustion_returns_none_rather_than_blocking(void) {
     held[0] = nev_blob_alloc(16, NULL);
     TEST_ASSERT_NOT_EQUAL(NEV_BLOB_NONE, held[0]);
 
-    for (unsigned i = 0; i < NEV_BLOB_SMALL_COUNT; i++) nev_blob_release(held[i]);
+    for (unsigned i = 0; i < NEV_BLOB_SMALL_COUNT; i++)
+        nev_blob_release(held[i]);
     TEST_ASSERT_TRUE(nev_blob_all_free());
 }
 
@@ -95,13 +100,13 @@ static void test_invalid_handles_are_inert(void) {
 }
 
 static void test_recycled_handle_does_not_alias_stale_data(void) {
-    uint8_t   *a = NULL;
+    uint8_t *a = NULL;
     nev_blob_t h1 = nev_blob_alloc(32, &a);
     memset(a, 0x11, 32);
     nev_blob_release(h1);
     TEST_ASSERT_EQUAL_UINT32(0, (uint32_t)nev_blob_len(h1)); /* length cleared on release */
 
-    uint8_t   *b = NULL;
+    uint8_t *b = NULL;
     nev_blob_t h2 = nev_blob_alloc(8, &b);
     TEST_ASSERT_EQUAL_UINT32(8, (uint32_t)nev_blob_len(h2));
     nev_blob_release(h2);

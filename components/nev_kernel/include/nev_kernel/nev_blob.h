@@ -26,7 +26,7 @@ extern "C" {
 #endif
 
 typedef uint16_t nev_blob_t;
-#define NEV_BLOB_NONE ((nev_blob_t)0xFFFFu)
+#define NEV_BLOB_NONE         ((nev_blob_t)0xFFFFu)
 
 /* Size classes. Provisional counts; tuned with measurements in BUDGET.md. */
 #define NEV_BLOB_SMALL_SIZE   512u
@@ -36,7 +36,7 @@ typedef uint16_t nev_blob_t;
 #define NEV_BLOB_LARGE_SIZE   65536u
 #define NEV_BLOB_LARGE_COUNT  4u
 
-#define NEV_BLOB_MAX_LEN NEV_BLOB_LARGE_SIZE
+#define NEV_BLOB_MAX_LEN      NEV_BLOB_LARGE_SIZE
 
 typedef struct {
     uint16_t in_use[3];
@@ -47,7 +47,7 @@ typedef struct {
 
 /* Allocates the backing buffers once, from PSRAM. Call during boot. */
 nev_err_t nev_blob_pool_init(void);
-void      nev_blob_pool_deinit(void);
+void nev_blob_pool_deinit(void);
 
 /*
  * Smallest class that fits len. Returns NEV_BLOB_NONE when the class is
@@ -57,15 +57,15 @@ void      nev_blob_pool_deinit(void);
 nev_blob_t nev_blob_alloc(size_t len, uint8_t **out);
 
 uint8_t *nev_blob_data(nev_blob_t handle);
-size_t   nev_blob_len(nev_blob_t handle);
+size_t nev_blob_len(nev_blob_t handle);
 
 void nev_blob_retain(nev_blob_t handle);
 void nev_blob_release(nev_blob_t handle);
 
 /* Debug and test surface. */
 uint32_t nev_blob_refcount(nev_blob_t handle);
-void     nev_blob_stats(nev_blob_stats_t *out);
-bool     nev_blob_all_free(void); /* leak assertion for test teardown */
+void nev_blob_stats(nev_blob_stats_t *out);
+bool nev_blob_all_free(void); /* leak assertion for test teardown */
 
 /*
  * Warn about any blob held longer than max_age_ms. A missing release is the one

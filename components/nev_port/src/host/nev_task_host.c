@@ -11,10 +11,10 @@
 #include <string.h>
 
 typedef struct {
-    pthread_t     th;
-    char          name[24];
+    pthread_t th;
+    char name[24];
     nev_task_fn_t fn;
-    void         *arg;
+    void *arg;
 } host_task_t;
 
 static __thread const char *s_self_name = "main";
@@ -62,11 +62,15 @@ nev_err_t nev_task_create(nev_task_t *out, const nev_task_cfg_t *cfg) {
     return NEV_OK;
 }
 
-void nev_task_yield(void) { sched_yield(); }
+void nev_task_yield(void) {
+    sched_yield();
+}
 
 size_t nev_task_stack_high_water(const nev_task_t *t) {
     NEV_UNUSED(t);
     return 0; /* not measurable on pthreads; real numbers come from the device */
 }
 
-const char *nev_task_self_name(void) { return s_self_name; }
+const char *nev_task_self_name(void) {
+    return s_self_name;
+}

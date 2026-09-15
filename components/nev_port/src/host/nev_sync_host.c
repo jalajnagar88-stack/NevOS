@@ -16,9 +16,9 @@ typedef struct {
 
 typedef struct {
     pthread_mutex_t m;
-    pthread_cond_t  cv;
-    uint32_t        count;
-    uint32_t        max_count;
+    pthread_cond_t cv;
+    uint32_t count;
+    uint32_t max_count;
 } host_sem_t;
 
 nev_err_t nev_mutex_init(nev_mutex_t *m) {
@@ -99,13 +99,14 @@ void nev_sem_give(nev_sem_t *s) {
 bool nev_sem_take(nev_sem_t *s, uint32_t timeout_ms) {
     NEV_ASSERT(s && s->impl);
     host_sem_t *h = s->impl;
-    bool        got = false;
+    bool got = false;
 
     pthread_mutex_lock(&h->m);
     if (timeout_ms == NEV_NO_WAIT) {
         got = h->count > 0;
     } else if (timeout_ms == NEV_WAIT_FOREVER) {
-        while (h->count == 0) pthread_cond_wait(&h->cv, &h->m);
+        while (h->count == 0)
+            pthread_cond_wait(&h->cv, &h->m);
         got = true;
     } else {
         /* One absolute deadline, re-derived each pass, so spurious wakeups

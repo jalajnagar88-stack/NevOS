@@ -7,33 +7,33 @@
 #include "nev_port/nev_time.h"
 #include <string.h>
 
-#define TAG "blob"
+#define TAG               "blob"
 
-#define CLASS_COUNT   3
-#define HANDLE_CLASS(h) ((uint8_t)((h) >> 12))
-#define HANDLE_INDEX(h) ((uint16_t)((h) & 0x0FFFu))
+#define CLASS_COUNT       3
+#define HANDLE_CLASS(h)   ((uint8_t)((h) >> 12))
+#define HANDLE_INDEX(h)   ((uint16_t)((h) & 0x0FFFu))
 #define MAKE_HANDLE(c, i) ((nev_blob_t)(((uint16_t)(c) << 12) | ((uint16_t)(i) & 0x0FFFu)))
 
 typedef struct {
     nev_atomic_u32_t refs;
-    uint32_t         len;
-    uint32_t         alloc_ms;
+    uint32_t len;
+    uint32_t alloc_ms;
 } blob_desc_t;
 
 typedef struct {
-    uint32_t     block_size;
-    uint16_t     capacity;
-    uint8_t     *storage;   /* capacity * block_size, one PSRAM allocation */
-    blob_desc_t *desc;      /* capacity descriptors                        */
-    uint16_t    *free_list; /* stack of free indices                       */
-    uint16_t     free_count;
-    uint16_t     high_water;
+    uint32_t block_size;
+    uint16_t capacity;
+    uint8_t *storage;    /* capacity * block_size, one PSRAM allocation */
+    blob_desc_t *desc;   /* capacity descriptors                        */
+    uint16_t *free_list; /* stack of free indices                       */
+    uint16_t free_count;
+    uint16_t high_water;
 } blob_class_t;
 
 static blob_class_t s_class[CLASS_COUNT];
-static nev_mutex_t  s_lock;
-static bool         s_ready;
-static uint32_t     s_alloc_failures;
+static nev_mutex_t s_lock;
+static bool s_ready;
+static uint32_t s_alloc_failures;
 
 static const uint32_t kSize[CLASS_COUNT] = {NEV_BLOB_SMALL_SIZE, NEV_BLOB_MEDIUM_SIZE,
                                             NEV_BLOB_LARGE_SIZE};
@@ -65,7 +65,8 @@ nev_err_t nev_blob_pool_init(void) {
             nev_blob_pool_deinit();
             return NEV_ERR_NO_MEM;
         }
-        for (uint16_t i = 0; i < cl->capacity; i++) cl->free_list[i] = cl->capacity - 1 - i;
+        for (uint16_t i = 0; i < cl->capacity; i++)
+            cl->free_list[i] = cl->capacity - 1 - i;
         cl->free_count = cl->capacity;
         cl->high_water = 0;
     }
@@ -103,7 +104,8 @@ nev_blob_t nev_blob_alloc(size_t len, uint8_t **out) {
     /* Smallest class that fits. Never spill upward: a 600-byte payload taking a
      * 64 KB block would starve OTA for no benefit. */
     int c = 0;
-    while (c < CLASS_COUNT && len > kSize[c]) c++;
+    while (c < CLASS_COUNT && len > kSize[c])
+        c++;
     if (c >= CLASS_COUNT) {
         s_alloc_failures++;
         return NEV_BLOB_NONE;
@@ -152,10 +154,10 @@ void nev_blob_retain(nev_blob_t h) {
 
 void nev_blob_release(nev_blob_t h) {
     if (!handle_valid(h)) return;
-    uint8_t       c = HANDLE_CLASS(h);
-    uint16_t      idx = HANDLE_INDEX(h);
+    uint8_t c = HANDLE_CLASS(h);
+    uint16_t idx = HANDLE_INDEX(h);
     blob_class_t *cl = &s_class[c];
-    blob_desc_t  *d = &cl->desc[idx];
+    blob_desc_t *d = &cl->desc[idx];
 
     NEV_ASSERT(nev_atomic_load(&d->refs) > 0); /* double release */
     if (nev_atomic_dec(&d->refs) != 0) return;
@@ -191,7 +193,8 @@ bool nev_blob_all_free(void) {
     if (!s_ready) return true;
     nev_mutex_lock(&s_lock);
     bool clean = true;
-    for (int c = 0; c < CLASS_COUNT && clean; c++) clean = s_class[c].free_count == s_class[c].capacity;
+    for (int c = 0; c < CLASS_COUNT && clean; c++)
+        clean = s_class[c].free_count == s_class[c].capacity;
     nev_mutex_unlock(&s_lock);
     return clean;
 }

@@ -26,7 +26,7 @@ typedef enum {
 
 void *nev_malloc(size_t size, uint32_t caps);
 void *nev_calloc(size_t count, size_t size, uint32_t caps);
-void  nev_free(void *ptr);
+void nev_free(void *ptr);
 
 size_t nev_mem_free_bytes(uint32_t caps);
 size_t nev_mem_used_bytes(uint32_t caps);

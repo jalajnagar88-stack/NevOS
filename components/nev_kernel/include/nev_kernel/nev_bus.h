@@ -40,9 +40,9 @@ typedef enum {
 } nev_full_policy_t;
 
 typedef struct {
-    const char       *name;    /* copied; appears in overflow warnings   */
-    uint32_t          domains; /* NEV_DOM(X) | NEV_DOM(Y), or NEV_DOM_ALL */
-    uint8_t           depth;   /* 1..NEV_BUS_MAX_DEPTH                    */
+    const char *name; /* copied; appears in overflow warnings   */
+    uint32_t domains; /* NEV_DOM(X) | NEV_DOM(Y), or NEV_DOM_ALL */
+    uint8_t depth;    /* 1..NEV_BUS_MAX_DEPTH                    */
     nev_full_policy_t full_policy;
     bool coalesce; /* replace a queued event of the same type instead of enqueueing */
 } nev_sub_cfg_t;
@@ -53,21 +53,21 @@ typedef struct {
     uint32_t received;
     uint32_t dropped;
     uint32_t coalesced;
-    uint8_t  depth;
-    uint8_t  queued;
-    uint8_t  high_water;
+    uint8_t depth;
+    uint8_t queued;
+    uint8_t high_water;
 } nev_sub_stats_t;
 
 typedef struct {
     uint32_t published;
     uint32_t delivered;
     uint32_t dropped;
-    uint8_t  sub_count;
+    uint8_t sub_count;
 } nev_bus_stats_t;
 
 nev_err_t nev_bus_init(void);
-void      nev_bus_deinit(void); /* tears down every subscription; for tests and shutdown */
-bool      nev_bus_is_ready(void);
+void nev_bus_deinit(void); /* tears down every subscription; for tests and shutdown */
+bool nev_bus_is_ready(void);
 
 /*
  * Subscribe. Callable only during init, before publishing begins: subscriber
@@ -102,8 +102,8 @@ bool nev_bus_recv(nev_sub_t *sub, nev_event_t *out, uint32_t timeout_ms);
 /* Discard everything queued for this subscriber, releasing any blob references. */
 void nev_bus_flush(nev_sub_t *sub);
 
-void       nev_bus_stats(nev_bus_stats_t *out);
-void       nev_sub_stats(const nev_sub_t *sub, nev_sub_stats_t *out);
+void nev_bus_stats(nev_bus_stats_t *out);
+void nev_sub_stats(const nev_sub_t *sub, nev_sub_stats_t *out);
 const char *nev_sub_name(const nev_sub_t *sub);
 
 /*

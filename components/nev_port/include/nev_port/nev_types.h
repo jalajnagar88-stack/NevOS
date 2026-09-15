@@ -30,8 +30,8 @@ const char *nev_err_str(nev_err_t err);
 #define NEV_ARRAY_LEN(a) (sizeof(a) / sizeof((a)[0]))
 #define NEV_UNUSED(x)    ((void)(x))
 
-#define NEV_MIN(a, b) ((a) < (b) ? (a) : (b))
-#define NEV_MAX(a, b) ((a) > (b) ? (a) : (b))
+#define NEV_MIN(a, b)    ((a) < (b) ? (a) : (b))
+#define NEV_MAX(a, b)    ((a) > (b) ? (a) : (b))
 
 /* Propagate a non-OK result to the caller. */
 #define NEV_TRY(expr)                                                                              \
@@ -44,8 +44,12 @@ typedef struct {
     int16_t x1, y1, x2, y2; /* inclusive */
 } nev_rect_t;
 
-static inline int32_t nev_rect_w(const nev_rect_t *r) { return (int32_t)r->x2 - r->x1 + 1; }
-static inline int32_t nev_rect_h(const nev_rect_t *r) { return (int32_t)r->y2 - r->y1 + 1; }
+static inline int32_t nev_rect_w(const nev_rect_t *r) {
+    return (int32_t)r->x2 - r->x1 + 1;
+}
+static inline int32_t nev_rect_h(const nev_rect_t *r) {
+    return (int32_t)r->y2 - r->y1 + 1;
+}
 
 #ifdef __cplusplus
 }

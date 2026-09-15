@@ -18,7 +18,7 @@ extern "C" {
 #define NEV_EVENT_PAYLOAD_BYTES 16
 
 /* flags */
-#define NEV_EVF_BLOB (1u << 0) /* p.blob.handle owns a reference; receiver must release */
+#define NEV_EVF_BLOB            (1u << 0) /* p.blob.handle owns a reference; receiver must release */
 
 /* ------------------------------------------------------------- payload types */
 
@@ -40,8 +40,8 @@ typedef struct {
 } nev_p_gesture_t;
 
 typedef struct {
-    uint8_t  mood;
-    uint8_t  intensity; /* 0..255 */
+    uint8_t mood;
+    uint8_t intensity; /* 0..255 */
     uint16_t duration_ms;
 } nev_p_mood_t;
 
@@ -61,13 +61,13 @@ typedef struct {
 
 typedef struct {
     uint16_t millivolts;
-    uint8_t  percent;
-    uint8_t  charging;
+    uint8_t percent;
+    uint8_t charging;
 } nev_p_battery_t;
 
 typedef struct {
-    uint8_t  sub_index;
-    uint8_t  reserved;
+    uint8_t sub_index;
+    uint8_t reserved;
     uint16_t event_type; /* the type that could not be delivered */
     uint32_t dropped_total;
 } nev_p_overflow_t;
@@ -85,31 +85,31 @@ typedef struct {
 } nev_p_score_t;
 
 typedef union {
-    uint8_t  raw[NEV_EVENT_PAYLOAD_BYTES];
-    int32_t  i32[4];
+    uint8_t raw[NEV_EVENT_PAYLOAD_BYTES];
+    int32_t i32[4];
     uint32_t u32[4];
-    float    f32[4];
+    float f32[4];
 
-    nev_p_touch_t    touch;
-    nev_p_button_t   button;
-    nev_p_gesture_t  gesture;
-    nev_p_mood_t     mood;
-    nev_p_blob_t     blob;
-    nev_p_frame_t    frame;
-    nev_p_battery_t  battery;
+    nev_p_touch_t touch;
+    nev_p_button_t button;
+    nev_p_gesture_t gesture;
+    nev_p_mood_t mood;
+    nev_p_blob_t blob;
+    nev_p_frame_t frame;
+    nev_p_battery_t battery;
     nev_p_overflow_t overflow;
-    nev_p_heap_t     heap;
-    nev_p_score_t    score;
+    nev_p_heap_t heap;
+    nev_p_score_t score;
 } nev_payload_t;
 
 /* --------------------------------------------------------------- the event */
 
 typedef struct {
-    uint16_t      type;   /* NEV_EVT_*                                  */
-    uint8_t       flags;  /* NEV_EVF_*                                  */
-    uint8_t       source; /* enum nev_source — publisher, for tracing   */
-    uint32_t      seq;    /* assigned by the bus, monotonic             */
-    uint64_t      ts_us;  /* assigned by the bus, monotonic since boot  */
+    uint16_t type;  /* NEV_EVT_*                                  */
+    uint8_t flags;  /* NEV_EVF_*                                  */
+    uint8_t source; /* enum nev_source — publisher, for tracing   */
+    uint32_t seq;   /* assigned by the bus, monotonic             */
+    uint64_t ts_us; /* assigned by the bus, monotonic since boot  */
     nev_payload_t p;
 } nev_event_t;
 

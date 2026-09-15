@@ -30,9 +30,9 @@ typedef enum {
 /* Secondary sink; receives an already-formatted line without a trailing newline. */
 typedef void (*nev_log_sink_t)(nev_log_level_t level, const char *tag, const char *line);
 
-void            nev_log_set_level(nev_log_level_t level);
+void nev_log_set_level(nev_log_level_t level);
 nev_log_level_t nev_log_get_level(void);
-void            nev_log_set_sink(nev_log_sink_t sink);
+void nev_log_set_sink(nev_log_sink_t sink);
 
 void nev_log_write(nev_log_level_t level, const char *tag, const char *fmt, ...)
     __attribute__((format(printf, 3, 4)));

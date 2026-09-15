@@ -17,14 +17,14 @@
 typedef struct {
     uint32_t magic;
     uint32_t caps;
-    size_t   size;
-    size_t   pad; /* keep the payload 16-byte aligned */
+    size_t size;
+    size_t pad; /* keep the payload 16-byte aligned */
 } mem_hdr_t;
 
-static size_t      s_used_internal;
-static size_t      s_used_psram;
+static size_t s_used_internal;
+static size_t s_used_psram;
 static nev_mutex_t s_lock;
-static bool        s_lock_ready;
+static bool s_lock_ready;
 
 static void lock_init_once(void) {
     if (!s_lock_ready) {
@@ -42,7 +42,7 @@ void *nev_malloc(size_t size, uint32_t caps) {
     if (size == 0) return NULL;
     lock_init_once();
 
-    bool   internal = wants_internal(caps);
+    bool internal = wants_internal(caps);
     size_t budget = internal ? NEV_SIM_INTERNAL_BYTES : NEV_SIM_PSRAM_BYTES;
 
     nev_mutex_lock(&s_lock);
@@ -71,7 +71,7 @@ void *nev_malloc(size_t size, uint32_t caps) {
 void *nev_calloc(size_t count, size_t size, uint32_t caps) {
     if (count != 0 && size > SIZE_MAX / count) return NULL;
     size_t total = count * size;
-    void  *p = nev_malloc(total, caps);
+    void *p = nev_malloc(total, caps);
     if (p) memset(p, 0, total);
     return p;
 }

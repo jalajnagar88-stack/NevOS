@@ -3,8 +3,10 @@
 #include "unity.h"
 #include <string.h>
 
-void setUp(void) {}
-void tearDown(void) {}
+void setUp(void) {
+}
+void tearDown(void) {
+}
 
 static const uint16_t kAllTypes[] = {
 #define NEV_X(domain, name, code) NEV_EVT_##domain##_##name,

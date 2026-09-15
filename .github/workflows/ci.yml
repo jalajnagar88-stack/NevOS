@@ -1,0 +1,69 @@
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  host:
+    name: host (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # macOS is the primary development machine; Linux is what CI and the
+        # container use. The pthread and SDL2 paths differ between them, so both
+        # are built rather than assumed equivalent.
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libsdl2-dev clang-format
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja sdl2 clang-format
+
+      - name: Layering rules
+        run: python3 tools/ci/lint_layers.py
+
+      - name: Formatting
+        run: ./tools/build.sh format-check
+
+      - name: Unit tests
+        run: ./tools/build.sh test
+
+      - name: Simulator — headless render
+        run: ./tools/build.sh headless 90 build/shot
+
+      - name: Simulator — SDL2 build
+        run: |
+          cmake -S targets/host -B build/host -GNinja -DNEVOS_DISPLAY=sdl2
+          cmake --build build/host
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: framebuffer-${{ matrix.os }}
+          path: build/shot.png
+
+  device:
+    name: esp32s3 firmware
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build with ESP-IDF v5.2.2
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.2.2
+          target: esp32s3
+          path: targets/esp32s3

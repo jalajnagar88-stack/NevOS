@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# NEVOS build driver. Everything a contributor needs, in one place.
+#
+#   ./tools/build.sh sim         window (SDL2), then run it
+#   ./tools/build.sh headless    no window; renders frames and captures a PNG
+#   ./tools/build.sh test        host unit tests
+#   ./tools/build.sh lint        layering rules from ARCHITECTURE.md §9
+#   ./tools/build.sh format      apply clang-format
+#   ./tools/build.sh check       lint + format-check + test + both host builds
+#   ./tools/build.sh device      ESP32-S3 firmware (needs ESP-IDF on PATH)
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+GEN=$(command -v ninja >/dev/null 2>&1 && echo "-GNinja" || echo "")
+BUILD() { cmake --build "$1" "${@:2}"; }
+
+need_submodules() {
+  if [ ! -f third_party/lvgl/lvgl.h ] || [ ! -f third_party/unity/src/unity.c ]; then
+    echo "==> fetching submodules"
+    git submodule update --init --recursive
+  fi
+}
+
+case "${1:-check}" in
+  sim)
+    need_submodules
+    cmake -S targets/host -B build/host $GEN -DNEVOS_DISPLAY=sdl2 -DCMAKE_BUILD_TYPE=Debug
+    BUILD build/host
+    shift || true
+    exec ./build/host/nevos_sim "$@"
+    ;;
+
+  headless)
+    need_submodules
+    FRAMES="${2:-120}"
+    OUT="${3:-build/shot}"
+    cmake -S targets/host -B build/host-headless $GEN -DNEVOS_DISPLAY=headless -DCMAKE_BUILD_TYPE=Debug
+    BUILD build/host-headless
+    ./build/host-headless/nevos_sim --frames "$FRAMES" --shot "${OUT}.ppm"
+    python3 tools/ppm2png.py "${OUT}.ppm" "${OUT}.png"
+    ;;
+
+  test)
+    need_submodules
+    cmake -S targets/tests -B build/tests $GEN -DCMAKE_BUILD_TYPE=Debug
+    BUILD build/tests
+    ctest --test-dir build/tests --output-on-failure
+    ;;
+
+  lint)
+    python3 tools/ci/lint_layers.py
+    ;;
+
+  format)
+    find components apps targets boards -name '*.c' -o -name '*.h' 2>/dev/null \
+      | xargs -r clang-format -i
+    echo "formatted"
+    ;;
+
+  format-check)
+    find components apps targets boards -name '*.c' -o -name '*.h' 2>/dev/null \
+      | xargs -r clang-format --dry-run --Werror
+    echo "format ok"
+    ;;
+
+  device)
+    if ! command -v idf.py >/dev/null 2>&1; then
+      echo "ESP-IDF not on PATH. Run: . \$HOME/esp/esp-idf/export.sh" >&2
+      exit 1
+    fi
+    need_submodules
+    idf.py -C targets/esp32s3 "${@:2}"
+    ;;
+
+  check)
+    "$0" lint
+    "$0" format-check
+    "$0" test
+    "$0" headless 60 build/shot
+    cmake -S targets/host -B build/host $GEN -DNEVOS_DISPLAY=sdl2 -DCMAKE_BUILD_TYPE=Debug >/dev/null
+    BUILD build/host
+    echo
+    echo "all checks passed"
+    ;;
+
+  clean)
+    rm -rf build
+    echo "cleaned"
+    ;;
+
+  *)
+    sed -n '2,12p' "$0"
+    exit 2
+    ;;
+esac

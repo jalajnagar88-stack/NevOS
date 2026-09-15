@@ -34,17 +34,17 @@ typedef enum {
 #define NEV_CORE_UI  1 /* kept quiet for rendering */
 
 typedef struct {
-    const char   *name;
+    const char *name;
     nev_task_fn_t fn;
-    void         *arg;
-    size_t        stack_bytes;
-    nev_prio_t    priority;
-    int8_t        core;
+    void *arg;
+    size_t stack_bytes;
+    nev_prio_t priority;
+    int8_t core;
 } nev_task_cfg_t;
 
 nev_err_t nev_task_create(nev_task_t *out, const nev_task_cfg_t *cfg);
-void      nev_task_yield(void);
-size_t    nev_task_stack_high_water(const nev_task_t *t); /* bytes still unused */
+void nev_task_yield(void);
+size_t nev_task_stack_high_water(const nev_task_t *t); /* bytes still unused */
 const char *nev_task_self_name(void);
 
 #ifdef __cplusplus

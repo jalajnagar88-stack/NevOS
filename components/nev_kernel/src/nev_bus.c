@@ -19,15 +19,15 @@
 #define TAG "bus"
 
 struct nev_sub {
-    bool              in_use;
-    char              name[NEV_SUB_NAME_MAX];
-    uint32_t          domains;
-    uint8_t           depth;
+    bool in_use;
+    char name[NEV_SUB_NAME_MAX];
+    uint32_t domains;
+    uint8_t depth;
     nev_full_policy_t policy;
-    bool              coalesce;
+    bool coalesce;
 
     nev_event_t ring[NEV_BUS_MAX_DEPTH];
-    uint8_t     head, tail, count, high_water;
+    uint8_t head, tail, count, high_water;
 
     uint32_t received, dropped, coalesced, dropped_reported;
     uint16_t last_dropped_type;
@@ -35,28 +35,41 @@ struct nev_sub {
     nev_sem_t sem;
 };
 
-static struct nev_sub  s_subs[NEV_BUS_MAX_SUBS];
-static nev_mutex_t     s_lock;
-static bool            s_ready;
-static uint32_t        s_seq;
+static struct nev_sub s_subs[NEV_BUS_MAX_SUBS];
+static nev_mutex_t s_lock;
+static bool s_ready;
+static uint32_t s_seq;
 static nev_bus_stats_t s_stats;
 
 /* Each domain has exactly one legitimate producer. Checked in debug builds. */
 static uint8_t expected_source(uint8_t domain_id) {
     switch (domain_id) {
-        case NEV_DOM_ID_SYS: return NEV_SRC_KERNEL;
-        case NEV_DOM_ID_INPUT: return NEV_SRC_INPUT;
-        case NEV_DOM_ID_DISPLAY: return NEV_SRC_DISPLAY;
-        case NEV_DOM_ID_AUDIO: return NEV_SRC_AUDIO;
-        case NEV_DOM_ID_NET: return NEV_SRC_NET;
-        case NEV_DOM_ID_PERSONA: return NEV_SRC_PERSONA;
-        case NEV_DOM_ID_APP: return NEV_SRC_APPKIT;
-        case NEV_DOM_ID_BRIDGE: return NEV_SRC_BRIDGE;
-        case NEV_DOM_ID_POWER: return NEV_SRC_POWER;
-        case NEV_DOM_ID_STORAGE: return NEV_SRC_STORE;
-        case NEV_DOM_ID_GAME: return NEV_SRC_GAME;
-        case NEV_DOM_ID_OTA: return NEV_SRC_OTA;
-        default: return NEV_SRC_UNKNOWN;
+        case NEV_DOM_ID_SYS:
+            return NEV_SRC_KERNEL;
+        case NEV_DOM_ID_INPUT:
+            return NEV_SRC_INPUT;
+        case NEV_DOM_ID_DISPLAY:
+            return NEV_SRC_DISPLAY;
+        case NEV_DOM_ID_AUDIO:
+            return NEV_SRC_AUDIO;
+        case NEV_DOM_ID_NET:
+            return NEV_SRC_NET;
+        case NEV_DOM_ID_PERSONA:
+            return NEV_SRC_PERSONA;
+        case NEV_DOM_ID_APP:
+            return NEV_SRC_APPKIT;
+        case NEV_DOM_ID_BRIDGE:
+            return NEV_SRC_BRIDGE;
+        case NEV_DOM_ID_POWER:
+            return NEV_SRC_POWER;
+        case NEV_DOM_ID_STORAGE:
+            return NEV_SRC_STORE;
+        case NEV_DOM_ID_GAME:
+            return NEV_SRC_GAME;
+        case NEV_DOM_ID_OTA:
+            return NEV_SRC_OTA;
+        default:
+            return NEV_SRC_UNKNOWN;
     }
 }
 
@@ -84,7 +97,9 @@ void nev_bus_deinit(void) {
     s_ready = false;
 }
 
-bool nev_bus_is_ready(void) { return s_ready; }
+bool nev_bus_is_ready(void) {
+    return s_ready;
+}
 
 nev_sub_t *nev_bus_subscribe(const nev_sub_cfg_t *cfg) {
     if (!s_ready || !cfg || !cfg->name) return NULL;
@@ -145,7 +160,7 @@ static enq_result_t enqueue(struct nev_sub *sub, const nev_event_t *ev) {
 
     if (sub->coalesce) {
         for (uint8_t k = 0; k < sub->count; k++) {
-            uint8_t      idx = (uint8_t)((sub->tail + k) % sub->depth);
+            uint8_t idx = (uint8_t)((sub->tail + k) % sub->depth);
             nev_event_t *slot = &sub->ring[idx];
             if (slot->type != ev->type) continue;
 
@@ -196,8 +211,8 @@ nev_err_t nev_bus_publish(nev_event_t *ev) {
                ev->source == expected_source(NEV_TYPE_DOMAIN_ID(ev->type)));
 
     struct nev_sub *to_signal[NEV_BUS_MAX_SUBS];
-    uint8_t         signal_count = 0;
-    bool            any_dropped = false;
+    uint8_t signal_count = 0;
+    bool any_dropped = false;
 
     nev_mutex_lock(&s_lock);
     ev->seq = ++s_seq;
@@ -214,7 +229,9 @@ nev_err_t nev_bus_publish(nev_event_t *ev) {
                 to_signal[signal_count++] = sub;
                 s_stats.delivered++;
                 break;
-            case ENQ_REPLACED: s_stats.delivered++; break;
+            case ENQ_REPLACED:
+                s_stats.delivered++;
+                break;
             case ENQ_DROPPED:
                 s_stats.dropped++;
                 any_dropped = true;
@@ -224,7 +241,8 @@ nev_err_t nev_bus_publish(nev_event_t *ev) {
     nev_mutex_unlock(&s_lock);
 
     /* Signalling outside the lock keeps the critical section to a memcpy. */
-    for (uint8_t i = 0; i < signal_count; i++) nev_sem_give(&to_signal[i]->sem);
+    for (uint8_t i = 0; i < signal_count; i++)
+        nev_sem_give(&to_signal[i]->sem);
 
     return any_dropped ? NEV_ERR_DROPPED : NEV_OK;
 }
@@ -285,17 +303,19 @@ void nev_sub_stats(const nev_sub_t *sub, nev_sub_stats_t *out) {
     nev_mutex_unlock(&s_lock);
 }
 
-const char *nev_sub_name(const nev_sub_t *sub) { return sub ? sub->name : "?"; }
+const char *nev_sub_name(const nev_sub_t *sub) {
+    return sub ? sub->name : "?";
+}
 
 void nev_bus_report_overflows(void) {
     if (!s_ready) return;
 
     struct {
-        uint8_t  index;
+        uint8_t index;
         uint16_t type;
         uint32_t total;
         uint32_t delta;
-        char     name[NEV_SUB_NAME_MAX];
+        char name[NEV_SUB_NAME_MAX];
     } pending[NEV_BUS_MAX_SUBS];
     uint8_t n = 0;
 

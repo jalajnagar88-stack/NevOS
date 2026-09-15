@@ -1,7 +1,8 @@
 # The NEVOS Event Bus
 
-> Status: **proposed, awaiting approval.**
-> This is the contract every NEVOS subsystem is written against. If you are
+> Status: **implemented at M1** in `components/nev_kernel`, with the suite in
+> `components/nev_kernel/test/`. This is the contract every NEVOS subsystem is
+> written against. If you are
 > adding a service, a persona behavior, or an app, this is the page to read.
 
 The bus is the only sanctioned way for NEVOS subsystems to communicate. Direct
@@ -135,12 +136,21 @@ app's `on_event`, which means a crashing app cannot leak a bus slot.
 ## 5. Publishing
 
 ```c
-nev_err_t nev_bus_publish(const nev_event_t *ev);
-nev_err_t nev_bus_publish_isr(const nev_event_t *ev, bool *higher_prio_woken);
-
-/* convenience, the common case */
-NEV_PUBLISH(INPUT_GESTURE_SHAKE, .i32 = { intensity });
+nev_err_t nev_bus_publish(nev_event_t *ev);          /* seq and ts_us are filled in */
+nev_err_t nev_bus_publish_type(uint16_t type, uint8_t source);  /* payload-free case */
 ```
+
+**Publishing from an ISR is not yet supported**, and the earlier draft of this
+document promised it before it was built. The bus lock is a recursive mutex, and
+taking a mutex in an interrupt handler is not legal on FreeRTOS. Adding a
+second, lock-free path purely for interrupts would mean two sets of ordering
+semantics for no M1 benefit, since nothing publishes from an ISR yet.
+
+When it is needed — the GT911 touch interrupt and the I2S DMA completion at M5 —
+the shape is a small lock-free staging ring that `nev_bus_publish_isr` writes
+with atomics and `nev_input`/`nev_audio` drain on their next wake, republishing
+through the normal path. That keeps one set of semantics. Until then the
+function does not exist rather than existing and being unsafe.
 
 **`nev_bus_publish` never blocks and never fails the caller.** If a
 subscriber's ring is full, the event is dropped *for that subscriber* per its

@@ -1,6 +1,8 @@
 # NEVOS Architecture
 
-> Status: **proposed, awaiting approval.** No code exists yet.
+> Status: **M1 complete.** L-1, L1, L0 (simulator) and a minimal L2 display
+> service are implemented and tested; the rest of this document is the plan they
+> are built to serve.
 > Every decision here is meant to survive a year of building on it. Where a
 > decision is reversible, this document says so. Where it is not, it says that too.
 
@@ -392,7 +394,7 @@ Plus: `clang-format` verified, both targets built, host tests run, and
 
 ## 10. Decisions recorded
 
-Each of these has, or will have, an ADR in `docs/adr/`:
+Each of these has an ADR in [`docs/adr/`](docs/adr/):
 
 | # | Decision | Rejected alternative |
 |---|---|---|
@@ -403,6 +405,8 @@ Each of these has, or will have, an ADR in `docs/adr/`:
 | 0005 | SRAM strip buffers + PSRAM scanout framebuffer | double-buffered PSRAM framebuffers |
 | 0006 | Two build roots under `targets/` | one dispatching root CMakeLists |
 | 0007 | Schema-generated bridge codec | hand-written C and Rust structs |
+| 0008 | Device fully useful offline | daemon assumed present |
+| 0009 | Push-to-talk through M6 | on-device esp-sr wake word |
 
 ---
 

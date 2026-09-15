@@ -21,19 +21,21 @@ typedef struct {
     void *impl;
 } nev_sem_t;
 
-#define NEV_MUTEX_INIT {NULL}
-#define NEV_SEM_INIT   {NULL}
+#define NEV_MUTEX_INIT                                                                             \
+    { NULL }
+#define NEV_SEM_INIT                                                                               \
+    { NULL }
 
 nev_err_t nev_mutex_init(nev_mutex_t *m);
-void      nev_mutex_deinit(nev_mutex_t *m);
-void      nev_mutex_lock(nev_mutex_t *m);
-void      nev_mutex_unlock(nev_mutex_t *m);
+void nev_mutex_deinit(nev_mutex_t *m);
+void nev_mutex_lock(nev_mutex_t *m);
+void nev_mutex_unlock(nev_mutex_t *m);
 
 /* Counting semaphore, starts empty, saturates at max_count. */
 nev_err_t nev_sem_init(nev_sem_t *s, uint32_t max_count);
-void      nev_sem_deinit(nev_sem_t *s);
-void      nev_sem_give(nev_sem_t *s);
-bool      nev_sem_take(nev_sem_t *s, uint32_t timeout_ms); /* false on timeout */
+void nev_sem_deinit(nev_sem_t *s);
+void nev_sem_give(nev_sem_t *s);
+bool nev_sem_take(nev_sem_t *s, uint32_t timeout_ms); /* false on timeout */
 
 #ifdef __cplusplus
 }

@@ -16,7 +16,9 @@ uint64_t nev_now_us(void) {
     return raw - s_origin_us;
 }
 
-uint32_t nev_now_ms(void) { return (uint32_t)(nev_now_us() / 1000u); }
+uint32_t nev_now_ms(void) {
+    return (uint32_t)(nev_now_us() / 1000u);
+}
 
 void nev_sleep_ms(uint32_t ms) {
     struct timespec req = {.tv_sec = ms / 1000, .tv_nsec = (long)(ms % 1000) * 1000000L};
@@ -27,7 +29,7 @@ void nev_sleep_ms(uint32_t ms) {
 void nev_sleep_until_us(uint64_t deadline_us) {
     uint64_t now = nev_now_us();
     if (deadline_us <= now) return;
-    uint64_t        delta = deadline_us - now;
+    uint64_t delta = deadline_us - now;
     struct timespec req = {.tv_sec = (time_t)(delta / 1000000u),
                            .tv_nsec = (long)((delta % 1000000u) * 1000u)};
     while (nanosleep(&req, &req) == -1 && errno == EINTR) {

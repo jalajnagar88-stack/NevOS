@@ -3,12 +3,14 @@
 #include "unity.h"
 #include <string.h>
 
-void setUp(void) {}
-void tearDown(void) {}
+void setUp(void) {
+}
+void tearDown(void) {
+}
 
 static void test_alloc_and_free_balance_the_budget(void) {
     size_t before = nev_mem_used_bytes(NEV_MEM_PSRAM);
-    void  *p = nev_malloc(4096, NEV_MEM_PSRAM);
+    void *p = nev_malloc(4096, NEV_MEM_PSRAM);
     TEST_ASSERT_NOT_NULL(p);
     TEST_ASSERT_EQUAL_UINT32(before + 4096, nev_mem_used_bytes(NEV_MEM_PSRAM));
     nev_free(p);
@@ -17,7 +19,7 @@ static void test_alloc_and_free_balance_the_budget(void) {
 
 static void test_internal_and_psram_are_separate_budgets(void) {
     size_t psram_before = nev_mem_used_bytes(NEV_MEM_PSRAM);
-    void  *p = nev_malloc(1024, NEV_MEM_INTERNAL);
+    void *p = nev_malloc(1024, NEV_MEM_INTERNAL);
     TEST_ASSERT_NOT_NULL(p);
     TEST_ASSERT_EQUAL_UINT32(psram_before, nev_mem_used_bytes(NEV_MEM_PSRAM));
     nev_free(p);
@@ -34,7 +36,8 @@ static void test_oversized_request_is_refused_not_satisfied(void) {
 static void test_calloc_zeroes(void) {
     uint8_t *p = nev_calloc(64, 4, NEV_MEM_PSRAM);
     TEST_ASSERT_NOT_NULL(p);
-    for (int i = 0; i < 256; i++) TEST_ASSERT_EQUAL_UINT8(0, p[i]);
+    for (int i = 0; i < 256; i++)
+        TEST_ASSERT_EQUAL_UINT8(0, p[i]);
     nev_free(p);
 }
 
