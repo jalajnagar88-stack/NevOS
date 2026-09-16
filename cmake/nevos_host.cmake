@@ -10,6 +10,7 @@ get_filename_component(NEVOS_ROOT ${CMAKE_CURRENT_LIST_DIR}/.. ABSOLUTE)
 include(${NEVOS_ROOT}/components/nev_port/sources.cmake)
 include(${NEVOS_ROOT}/components/nev_kernel/sources.cmake)
 include(${NEVOS_ROOT}/components/nev_persona/sources.cmake)
+include(${NEVOS_ROOT}/components/nev_bridge/sources.cmake)
 
 add_library(nevos_warnings INTERFACE)
 target_compile_options(nevos_warnings INTERFACE
@@ -27,11 +28,13 @@ add_library(nevos_core STATIC
   ${NEV_KERNEL_HOST_SRCS}
   ${NEV_PERSONA_DIR}/src/face_presets.c
   ${NEV_PERSONA_DIR}/src/persona_core.c
+  ${NEV_BRIDGE_CODEC_SRCS}
 )
 target_include_directories(nevos_core PUBLIC
   ${NEV_PORT_INCLUDE_DIRS}
   ${NEV_KERNEL_INCLUDE_DIRS}
   ${NEV_PERSONA_INCLUDE_DIRS}
+  ${NEV_BRIDGE_INCLUDE_DIRS}
 )
 target_link_libraries(nevos_core PUBLIC m)
 set_target_properties(nevos_core PROPERTIES C_STANDARD 11 C_EXTENSIONS ON)

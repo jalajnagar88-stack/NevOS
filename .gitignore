@@ -11,3 +11,4 @@ target/
 compile_commands.json
 *.ppm
 shots/
+companion/target/

@@ -1,0 +1,12 @@
+# Default style, and formatting is deliberately NOT gated in CI.
+#
+# src/generated.rs and src/golden.rs are produced by tools/schema/gen.py.
+# `cargo fmt` reformats them, which makes `gen.py --check` report them as stale
+# on the next run — and rustfmt follows `mod` declarations, so even formatting
+# lib.rs alone recurses into them. The `--skip-children` flag that would prevent
+# that is nightly-only.
+#
+# Generated code does not need to be pretty, it needs to be identical, and the
+# checks that matter — the golden vectors and the staleness check — both run.
+# If you do run `cargo fmt`, follow it with `./tools/build.sh proto`.
+max_width = 100

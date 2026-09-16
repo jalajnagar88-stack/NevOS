@@ -31,8 +31,13 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install ninja sdl2 clang-format
 
-      - name: Layering rules
-        run: python3 tools/ci/lint_layers.py
+      - name: Layering rules and generated-code freshness
+        run: |
+          python3 tools/ci/lint_layers.py
+          python3 tools/schema/gen.py --check
+
+      - name: Companion daemon
+        run: ./tools/build.sh rust
 
       - name: Formatting
         run: ./tools/build.sh format-check

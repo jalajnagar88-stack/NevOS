@@ -1,0 +1,182 @@
+// GENERATED FROM schema/nevos.toml BY tools/schema/gen.py — DO NOT EDIT
+//
+// The same canonical vectors the C tests use. If the two codecs ever disagree,
+// one of these suites fails rather than a field arriving corrupt in production.
+#![allow(clippy::all)]
+
+use crate::generated::*;
+
+pub const GOLDEN_HELLO: &[u8] = &[
+    0x85, 0x01, 0x07, 0x6B, 0x64, 0x65, 0x76, 0x69, 0x63, 0x65, 0x5F, 0x69, 0x64, 0x2D, 0x31, 0x6A, 0x66, 0x69, 0x72, 0x6D, 0x77, 0x61, 0x72, 0x65, 0x2D, 0x32, 0x67, 0x74, 0x6F, 0x6B, 0x65, 0x6E, 0x2D, 0x33
+];
+
+pub fn sample_hello() -> Hello {
+    Hello {
+        protocol: 7,
+        device_id: "device_id-1".to_string(),
+        firmware: "firmware-2".to_string(),
+        token: "token-3".to_string(),
+    }
+}
+
+pub const GOLDEN_HELLO_ACK: &[u8] = &[
+    0x85, 0x02, 0xF5, 0xF4, 0x6D, 0x64, 0x61, 0x65, 0x6D, 0x6F, 0x6E, 0x5F, 0x6E, 0x61, 0x6D, 0x65, 0x2D, 0x32, 0x18, 0x1C
+];
+
+pub fn sample_hello_ack() -> HelloAck {
+    HelloAck {
+        accepted: true,
+        needs_pairing: false,
+        daemon_name: "daemon_name-2".to_string(),
+        unix_time: 28,
+    }
+}
+
+pub const GOLDEN_PAIR: &[u8] = &[
+    0x82, 0x03, 0x66, 0x63, 0x6F, 0x64, 0x65, 0x2D, 0x30
+];
+
+pub fn sample_pair() -> Pair {
+    Pair {
+        code: "code-0".to_string(),
+    }
+}
+
+pub const GOLDEN_PAIR_RESULT: &[u8] = &[
+    0x84, 0x04, 0xF5, 0x67, 0x74, 0x6F, 0x6B, 0x65, 0x6E, 0x2D, 0x31, 0x68, 0x72, 0x65, 0x61, 0x73, 0x6F, 0x6E, 0x2D, 0x32
+];
+
+pub fn sample_pair_result() -> PairResult {
+    PairResult {
+        granted: true,
+        token: "token-1".to_string(),
+        reason: "reason-2".to_string(),
+    }
+}
+
+pub const GOLDEN_PING: &[u8] = &[
+    0x82, 0x05, 0x07
+];
+
+pub fn sample_ping() -> Ping {
+    Ping {
+        nonce: 7,
+    }
+}
+
+pub const GOLDEN_PONG: &[u8] = &[
+    0x82, 0x06, 0x07
+];
+
+pub fn sample_pong() -> Pong {
+    Pong {
+        nonce: 7,
+    }
+}
+
+pub const GOLDEN_AUDIO_CHUNK: &[u8] = &[
+    0x85, 0x10, 0x07, 0x0E, 0xF5, 0x48, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A
+];
+
+pub fn sample_audio_chunk() -> AudioChunk {
+    AudioChunk {
+        seq: 7,
+        session: 14,
+        r#final: true,
+        pcm: vec![0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A],
+    }
+}
+
+pub const GOLDEN_TRANSCRIPT_PARTIAL: &[u8] = &[
+    0x83, 0x11, 0x07, 0x66, 0x74, 0x65, 0x78, 0x74, 0x2D, 0x31
+];
+
+pub fn sample_transcript_partial() -> TranscriptPartial {
+    TranscriptPartial {
+        session: 7,
+        text: "text-1".to_string(),
+    }
+}
+
+pub const GOLDEN_TRANSCRIPT_FINAL: &[u8] = &[
+    0x84, 0x12, 0x07, 0x66, 0x74, 0x65, 0x78, 0x74, 0x2D, 0x31, 0xFA, 0x40, 0x20, 0x00, 0x00
+];
+
+pub fn sample_transcript_final() -> TranscriptFinal {
+    TranscriptFinal {
+        session: 7,
+        text: "text-1".to_string(),
+        confidence: 2.5f32,
+    }
+}
+
+pub const GOLDEN_AGENT_REQUEST: &[u8] = &[
+    0x84, 0x18, 0x20, 0x07, 0x66, 0x74, 0x65, 0x78, 0x74, 0x2D, 0x31, 0x65, 0x61, 0x70, 0x70, 0x2D, 0x32
+];
+
+pub fn sample_agent_request() -> AgentRequest {
+    AgentRequest {
+        turn: 7,
+        text: "text-1".to_string(),
+        app: "app-2".to_string(),
+    }
+}
+
+pub const GOLDEN_AGENT_TOKEN: &[u8] = &[
+    0x83, 0x18, 0x21, 0x07, 0x66, 0x74, 0x65, 0x78, 0x74, 0x2D, 0x31
+];
+
+pub fn sample_agent_token() -> AgentToken {
+    AgentToken {
+        turn: 7,
+        text: "text-1".to_string(),
+    }
+}
+
+pub const GOLDEN_AGENT_DONE: &[u8] = &[
+    0x83, 0x18, 0x22, 0x07, 0x67, 0x65, 0x72, 0x72, 0x6F, 0x72, 0x2D, 0x31
+];
+
+pub fn sample_agent_done() -> AgentDone {
+    AgentDone {
+        turn: 7,
+        error: "error-1".to_string(),
+    }
+}
+
+pub const GOLDEN_MOOD_HINT: &[u8] = &[
+    0x84, 0x18, 0x30, 0x07, 0x0E, 0x15
+];
+
+pub fn sample_mood_hint() -> MoodHint {
+    MoodHint {
+        mood: 7,
+        intensity: 14,
+        duration_ms: 21,
+    }
+}
+
+pub const GOLDEN_NOTIFICATION: &[u8] = &[
+    0x84, 0x18, 0x31, 0x67, 0x74, 0x69, 0x74, 0x6C, 0x65, 0x2D, 0x30, 0x66, 0x62, 0x6F, 0x64, 0x79, 0x2D, 0x31, 0xF5
+];
+
+pub fn sample_notification() -> Notification {
+    Notification {
+        title: "title-0".to_string(),
+        body: "body-1".to_string(),
+        urgent: true,
+    }
+}
+
+pub const GOLDEN_OTA_AVAILABLE: &[u8] = &[
+    0x85, 0x18, 0x32, 0x69, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6F, 0x6E, 0x2D, 0x30, 0x65, 0x75, 0x72, 0x6C, 0x2D, 0x31, 0x15, 0x48, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A
+];
+
+pub fn sample_ota_available() -> OtaAvailable {
+    OtaAvailable {
+        version: "version-0".to_string(),
+        url: "url-1".to_string(),
+        size_bytes: 21,
+        sha256: vec![0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A],
+    }
+}

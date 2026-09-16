@@ -416,6 +416,7 @@ Each of these has an ADR in [`docs/adr/`](docs/adr/):
 | 0009 | Push-to-talk through M6 | on-device esp-sr wake word |
 | 0010 | Eyes-only face | character face; abstract orb |
 | 0011 | Game rules split from rendering | rules inside the renderer, smoke-tested |
+| 0012 | Dependency-free generated codec, 3 implementations | a CBOR crate on the Rust side |
 
 ---
 

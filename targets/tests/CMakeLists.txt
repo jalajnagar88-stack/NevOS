@@ -36,12 +36,17 @@ target_compile_definitions(unity PUBLIC UNITY_INCLUDE_DOUBLE UNITY_OUTPUT_COLOR)
 enable_testing()
 
 foreach(src ${NEV_KERNEL_TEST_SRCS} ${NEV_PERSONA_TEST_SRCS} ${NEV_APPKIT_TEST_SRCS}
+        ${NEV_BRIDGE_TEST_SRCS}
         ${NEV_GAME_RULE_TEST_SRCS})
   get_filename_component(name ${src} NAME_WE)
   add_executable(${name} ${src})
   target_link_libraries(${name} PRIVATE nevos_core unity)
   if(src IN_LIST NEV_APPKIT_TEST_SRCS)
     target_link_libraries(${name} PRIVATE nevos_appkit)
+  endif()
+  if(src IN_LIST NEV_BRIDGE_TEST_SRCS)
+    # golden_data.h lives beside the test, not on a public include path.
+    target_include_directories(${name} PRIVATE ${NEV_BRIDGE_DIR}/test)
   endif()
   if(src IN_LIST NEV_GAME_RULE_TEST_SRCS)
     target_link_libraries(${name} PRIVATE nevos_game_rules)

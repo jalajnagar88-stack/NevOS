@@ -1,0 +1,18 @@
+# NEVOS companion daemon workspace.
+#
+# The protocol crate is deliberately dependency-free: its codec is generated
+# from schema/nevos.toml and checked byte-for-byte against the same golden
+# vectors the firmware uses. A third-party CBOR crate would introduce a second
+# opinion about canonical encoding, which is exactly the drift the generated
+# codec exists to prevent.
+[workspace]
+resolver = "2"
+members = ["nevos-proto"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[profile.release]
+opt-level = 2

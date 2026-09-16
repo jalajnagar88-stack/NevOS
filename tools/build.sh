@@ -4,7 +4,9 @@
 #   ./tools/build.sh sim         window (SDL2), then run it
 #   ./tools/build.sh headless    no window; renders frames and captures a PNG
 #   ./tools/build.sh test        host unit tests
-#   ./tools/build.sh lint        layering rules from ARCHITECTURE.md §9
+#   ./tools/build.sh proto       regenerate the codec from schema/nevos.toml
+#   ./tools/build.sh rust        companion daemon tests
+#   ./tools/build.sh lint        layering rules, and that the codec is current
 #   ./tools/build.sh format      apply clang-format
 #   ./tools/build.sh asan        every screen under AddressSanitizer
 #   ./tools/build.sh check       lint + format + test + asan + both host builds
@@ -71,20 +73,42 @@ case "${1:-check}" in
     echo "asan: clean"
     ;;
 
+  proto)
+    # Regenerates the C and Rust codecs and the golden vectors from the schema.
+    python3 tools/schema/gen.py
+    ;;
+
+  rust)
+    if ! command -v cargo >/dev/null 2>&1; then
+      echo "cargo not found; install Rust to build the companion daemon" >&2
+      exit 1
+    fi
+    (cd companion && cargo test "${@:2}")
+    ;;
+
   lint)
     python3 tools/ci/lint_layers.py
+    # A checked-in codec that no longer matches the schema is the exact drift
+    # the generator exists to prevent, so a stale one fails the build.
+    python3 tools/schema/gen.py --check
     ;;
 
-  format)
-    find components apps targets boards -name '*.c' -o -name '*.h' 2>/dev/null \
-      | xargs -r clang-format -i
-    echo "formatted"
-    ;;
-
-  format-check)
-    find components apps targets boards -name '*.c' -o -name '*.h' 2>/dev/null \
-      | xargs -r clang-format --dry-run --Werror
-    echo "format ok"
+  format | format-check)
+    # Generated sources are excluded. Formatting them would make
+    # `gen.py --check` report them as stale, and pinning their formatting to
+    # whatever clang-format version happens to be installed would make that
+    # check fail differently on Linux and macOS. Generated code does not need to
+    # be pretty, it needs to be identical.
+    SOURCES=$(find components apps targets boards \( -name '*.c' -o -name '*.h' \) 2>/dev/null \
+      | xargs -r grep -L "GENERATED FROM schema/nevos.toml")
+    if [ -z "$SOURCES" ]; then echo "no sources found"; exit 0; fi
+    if [ "$1" = "format" ]; then
+      echo "$SOURCES" | xargs clang-format -i
+      echo "formatted"
+    else
+      echo "$SOURCES" | xargs clang-format --dry-run --Werror
+      echo "format ok"
+    fi
     ;;
 
   device)
@@ -102,6 +126,7 @@ case "${1:-check}" in
     "$0" test
     "$0" headless 60 build/shot
     "$0" asan
+    if command -v cargo >/dev/null 2>&1; then "$0" rust; else echo "(skipping rust: no cargo)"; fi
     cmake -S targets/host -B build/host $GEN -DNEVOS_DISPLAY=sdl2 -DCMAKE_BUILD_TYPE=Debug >/dev/null
     BUILD build/host
     echo

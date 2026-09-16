@@ -1,0 +1,296 @@
+# NEVOS bridge protocol — the single source of truth.
+#
+# This file generates the C structs and codec, the Rust types and codec, and the
+# golden vectors both are tested against. Nothing on either side is hand-written,
+# so the two cannot drift: a field added here that one side forgets to handle is
+# a build failure, not a corrupt value discovered in production.
+#
+# Regenerate with:  ./tools/build.sh proto
+# CI fails if the checked-in output differs from what the schema produces.
+#
+# ---------------------------------------------------------------------------
+# WIRE FORMAT
+#
+#   frame  = u32 big-endian length | CBOR payload
+#   payload = CBOR array: [ message_id, field0, field1, ... ]
+#
+# Positional, not a map: it is roughly half the size, and the field names live
+# in the generated code on both sides rather than on the wire.
+#
+# COMPATIBILITY RULES, which the decoders enforce:
+#   - Fields may only be APPENDED. Never reorder, never remove, never retype.
+#   - A decoder ignores trailing fields it does not know, so a new daemon can
+#     talk to an old device.
+#   - A decoder leaves missing trailing fields at their zero value, so an old
+#     daemon can talk to a new device.
+#   - Message ids are permanent. A retired message keeps its id reserved.
+# ---------------------------------------------------------------------------
+
+protocol_version = 1
+
+# Bounds are enforced by the decoder. They exist because this runs on a device
+# with 512 KB of RAM: an unbounded string from the network is an unbounded
+# allocation, and there is nowhere to put one.
+max_frame_bytes = 8192
+max_text_bytes = 512
+
+# ===========================================================================
+# Session
+# ===========================================================================
+
+[[message]]
+name = "hello"
+id = 1
+sender = "device"
+doc = "First frame after the socket opens. Identifies the device and states what it can do."
+  [[message.field]]
+  name = "protocol"
+  type = "u16"
+  doc = "protocol_version from this schema. A mismatch is refused by the daemon."
+  [[message.field]]
+  name = "device_id"
+  type = "str"
+  max = 32
+  doc = "Stable per device. Derived from the MAC, not a secret."
+  [[message.field]]
+  name = "firmware"
+  type = "str"
+  max = 24
+  [[message.field]]
+  name = "token"
+  type = "str"
+  max = 64
+  doc = "The pairing token from a previous session, or empty when unpaired."
+
+[[message]]
+name = "hello_ack"
+id = 2
+sender = "daemon"
+doc = "Accepts the session, or tells the device it must pair first."
+  [[message.field]]
+  name = "accepted"
+  type = "bool"
+  [[message.field]]
+  name = "needs_pairing"
+  type = "bool"
+  [[message.field]]
+  name = "daemon_name"
+  type = "str"
+  max = 48
+  doc = "Shown on the device so the user can tell which machine answered."
+  [[message.field]]
+  name = "unix_time"
+  type = "u64"
+  doc = "The device has no RTC; this is where its wall clock comes from."
+
+[[message]]
+name = "pair"
+id = 3
+sender = "device"
+doc = "Sent while the user is entering the on-screen code in the desktop app."
+  [[message.field]]
+  name = "code"
+  type = "str"
+  max = 12
+  doc = "The one-time code shown on the device screen."
+
+[[message]]
+name = "pair_result"
+id = 4
+sender = "daemon"
+doc = "Grants a long-lived device token, or refuses."
+  [[message.field]]
+  name = "granted"
+  type = "bool"
+  [[message.field]]
+  name = "token"
+  type = "str"
+  max = 64
+  doc = "Stored in NVS. Erased by a factory reset."
+  [[message.field]]
+  name = "reason"
+  type = "str"
+  max = 64
+
+[[message]]
+name = "ping"
+id = 5
+sender = "both"
+doc = "Liveness. A socket that has stopped delivering does not always report itself closed."
+  [[message.field]]
+  name = "nonce"
+  type = "u32"
+
+[[message]]
+name = "pong"
+id = 6
+sender = "both"
+  [[message.field]]
+  name = "nonce"
+  type = "u32"
+  doc = "Echoed from the ping, so a stale reply cannot be mistaken for a fresh one."
+
+# ===========================================================================
+# Voice
+# ===========================================================================
+
+[[message]]
+name = "audio_chunk"
+id = 16
+sender = "device"
+doc = "One frame of captured microphone audio. Roughly 50 a second while recording."
+  [[message.field]]
+  name = "seq"
+  type = "u32"
+  doc = "Monotonic within a capture. Lets the daemon spot a dropped frame."
+  [[message.field]]
+  name = "session"
+  type = "u32"
+  doc = "Groups chunks into one utterance or recording."
+  [[message.field]]
+  name = "final"
+  type = "bool"
+  doc = "Last chunk of this session; the daemon can finalise the transcript."
+  [[message.field]]
+  name = "pcm"
+  type = "bytes"
+  max = 4096
+  doc = "16 kHz mono signed 16-bit little-endian."
+
+[[message]]
+name = "transcript_partial"
+id = 17
+sender = "daemon"
+doc = "Best guess so far. Replaces any previous partial for this session."
+  [[message.field]]
+  name = "session"
+  type = "u32"
+  [[message.field]]
+  name = "text"
+  type = "str"
+  max = 512
+
+[[message]]
+name = "transcript_final"
+id = 18
+sender = "daemon"
+  [[message.field]]
+  name = "session"
+  type = "u32"
+  [[message.field]]
+  name = "text"
+  type = "str"
+  max = 512
+  [[message.field]]
+  name = "confidence"
+  type = "f32"
+
+# ===========================================================================
+# Agent
+# ===========================================================================
+
+[[message]]
+name = "agent_request"
+id = 32
+sender = "device"
+  [[message.field]]
+  name = "turn"
+  type = "u32"
+  doc = "Increments per exchange. The daemon keeps the conversation context."
+  [[message.field]]
+  name = "text"
+  type = "str"
+  max = 512
+  [[message.field]]
+  name = "app"
+  type = "str"
+  max = 16
+  doc = "Which app asked, so the daemon can vary its tone or tools."
+
+[[message]]
+name = "agent_token"
+id = 33
+sender = "daemon"
+doc = "One streamed fragment of the reply. Rendered as it arrives."
+  [[message.field]]
+  name = "turn"
+  type = "u32"
+  [[message.field]]
+  name = "text"
+  type = "str"
+  max = 512
+
+[[message]]
+name = "agent_done"
+id = 34
+sender = "daemon"
+  [[message.field]]
+  name = "turn"
+  type = "u32"
+  [[message.field]]
+  name = "error"
+  type = "str"
+  max = 128
+  doc = "Empty on success. The device shows it rather than failing silently."
+
+# ===========================================================================
+# Device control
+# ===========================================================================
+
+[[message]]
+name = "mood_hint"
+id = 48
+sender = "daemon"
+doc = """
+Lets the agent's tone drive the face, so the device's mood and the agent's mood
+are the same thing to the user. Published as BRIDGE.MOOD_HINT; the persona
+subscribes. The bridge never calls the persona directly — they are peers.
+"""
+  [[message.field]]
+  name = "mood"
+  type = "u8"
+  doc = "nev_mood_t. An unknown value is ignored rather than defaulting to idle."
+  [[message.field]]
+  name = "intensity"
+  type = "u8"
+  [[message.field]]
+  name = "duration_ms"
+  type = "u16"
+  doc = "0 makes it the resting mood; non-zero returns to the previous one."
+
+[[message]]
+name = "notification"
+id = 49
+sender = "daemon"
+  [[message.field]]
+  name = "title"
+  type = "str"
+  max = 48
+  [[message.field]]
+  name = "body"
+  type = "str"
+  max = 160
+  [[message.field]]
+  name = "urgent"
+  type = "bool"
+
+[[message]]
+name = "ota_available"
+id = 50
+sender = "daemon"
+  [[message.field]]
+  name = "version"
+  type = "str"
+  max = 24
+  [[message.field]]
+  name = "url"
+  type = "str"
+  max = 256
+  [[message.field]]
+  name = "size_bytes"
+  type = "u32"
+  [[message.field]]
+  name = "sha256"
+  type = "bytes"
+  max = 32
+  doc = "The image is verified against this and its signature before it is applied."
