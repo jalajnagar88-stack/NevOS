@@ -158,7 +158,9 @@ typedef enum {
 static enq_result_t enqueue(struct nev_sub *sub, const nev_event_t *ev) {
     const bool carries_blob = (ev->flags & NEV_EVF_BLOB) != 0;
 
-    if (sub->coalesce) {
+    /* Both have to agree: the subscriber is willing, and the type is a
+     * snapshot rather than a fragment. See nev_evt_is_coalescable. */
+    if (sub->coalesce && nev_evt_is_coalescable(ev->type)) {
         for (uint8_t k = 0; k < sub->count; k++) {
             uint8_t idx = (uint8_t)((sub->tail + k) % sub->depth);
             nev_event_t *slot = &sub->ring[idx];

@@ -14,6 +14,25 @@ const char *nev_domain_name(uint8_t domain_id) {
     return "?";
 }
 
+bool nev_evt_is_coalescable(uint16_t type) {
+    switch (type) {
+        /* Each of these is "the current value of something". Losing an older
+         * one costs nothing, because the newer one says everything it said. */
+        case NEV_EVT_DISPLAY_FRAME_STATS:
+        case NEV_EVT_INPUT_TOUCH:
+        case NEV_EVT_INPUT_GESTURE_TILT:
+        case NEV_EVT_POWER_BATTERY:
+        case NEV_EVT_SYS_HEAP_STATS:
+        case NEV_EVT_PERSONA_MOOD_CHANGED:
+        /* The schema says a partial transcript "replaces any previous partial
+         * for this session", so this one is a snapshot by definition. */
+        case NEV_EVT_BRIDGE_TRANSCRIPT_PARTIAL:
+            return true;
+        default:
+            return false;
+    }
+}
+
 const char *nev_evt_name(uint16_t type) {
     switch (type) {
 #define NEV_X(domain, name, code)                                                                  \

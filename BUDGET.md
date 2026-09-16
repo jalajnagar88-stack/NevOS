@@ -217,6 +217,56 @@ during a burst steals the oldest rather than allocating.
 
 ---
 
+## M6 — bridge and daemon
+
+The daemon runs on the user's computer and costs the device nothing. What is
+charged here is the device's half: a WebSocket client, an mDNS resolver, and the
+buffers they need.
+
+### Internal SRAM
+
+| Item | Bytes | Measured where | Note |
+|---|---|---|---|
+| WebSocket receive buffer | 2,048 | `sizeof(nev_ws_t)` | caps an inbound frame; the largest the daemon sends is a 512-byte agent token |
+| WebSocket send buffer | 4,352 | same | one whole outbound frame: a 4,096-byte audio chunk plus CBOR, the length prefix and a 14-byte header |
+| Bridge encode scratch | 4,300 | `sizeof` | the audio chunk again, before framing |
+| mDNS packet buffer | 600 | `sizeof(nev_mdns_t)` | one datagram; discovery stops once a daemon is found |
+| Shell subscriber ring | +384 | depth 12 → 24 | see below |
+| **Bridge total** | **~11.7 KB** | | one static instance, no allocation anywhere |
+| **Committed total** | **~409 KB** | | of 512 KB |
+
+The two 4 KB buffers exist for audio, which is the only large thing the device
+sends. If internal SRAM gets tight during hardware bring-up, the audio chunk
+size is the knob: halving it to 2,048 bytes costs one more frame per 64 ms of
+speech and gives back 4 KB.
+
+### Why the shell's queue grew
+
+A streamed reply arrives as one event per token. A local model can produce a
+burst of them between two frames, and at depth 12 the first half of a reply was
+being evicted before the shell ever drew it — the screen showed the end of a
+sentence with no beginning, with nothing logged, because DROP_OLDEST is exactly
+what the shell asked for.
+
+Depth 24 holds a whole short reply, at 768 bytes rather than 384. The other half
+of the fix costs nothing: the bridge publishes at most six messages per poll and
+leaves the rest in the socket, where TCP's own receive window holds the backlog.
+That is a much better place for it than a ring of 32-byte slots on a device with
+512 KB of RAM.
+
+### Frame time
+
+The bridge does not run on the render task. On the device it belongs to
+`nev_net`; in the simulator it is polled from the main loop, and a 600-frame run
+with discovery, pairing and an agent turn averaged 9 us per frame with a worst
+case of 1,586 us — the worst being an LVGL relayout, not the bridge.
+
+Non-blocking is what makes that true, and it is enforced by construction: every
+socket call in `nev_port/nev_net.h` returns immediately, and a connection in
+progress is polled rather than waited on.
+
+---
+
 ## Method
 
 Internal and PSRAM figures come from `sizeof` and from the allocation sites,

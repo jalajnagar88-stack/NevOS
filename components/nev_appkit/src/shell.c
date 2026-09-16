@@ -11,7 +11,19 @@
 
 #define TAG             "shell"
 
-#define EVENTS_PER_TICK 8
+/*
+ * A streamed agent reply arrives as one event per token, and a local model can
+ * produce a burst of them between two frames. At 8 per tick with a queue of 12,
+ * the first half of a reply was evicted before the shell ever saw it — the
+ * screen showed the end of a sentence with no beginning. The queue now holds a
+ * whole short reply, and a tick drains most of one.
+ *
+ * The other half of that fix is in the bridge, which publishes a bounded number
+ * of messages per poll and leaves the rest in the socket: TCP's window is a
+ * better place to hold a backlog than a 32-byte-per-slot ring on a device with
+ * 512 KB of RAM.
+ */
+#define EVENTS_PER_TICK 16
 #define TILE_W          132
 #define TILE_H          124
 
@@ -357,7 +369,7 @@ nev_err_t nev_shell_init(lv_obj_t *screen) {
         .name = "shell",
         .domains = NEV_DOM(INPUT) | NEV_DOM(NET) | NEV_DOM(POWER) | NEV_DOM(BRIDGE) | NEV_DOM(SYS) |
                    NEV_DOM(STORAGE),
-        .depth = 12,
+        .depth = 24,
         .full_policy = NEV_FULL_DROP_OLDEST,
         .coalesce = true,
     };

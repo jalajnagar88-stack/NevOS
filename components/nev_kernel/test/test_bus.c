@@ -211,12 +211,16 @@ static nev_blob_t make_blob(const char *text) {
     return h;
 }
 
-static nev_err_t publish_blob(nev_blob_t h) {
-    nev_event_t ev = nev_event_make(NEV_EVT_BRIDGE_AGENT_TOKEN, NEV_SRC_BRIDGE);
+static nev_err_t publish_blob_of(uint16_t type, nev_blob_t h) {
+    nev_event_t ev = nev_event_make(type, NEV_SRC_BRIDGE);
     ev.flags = NEV_EVF_BLOB;
     ev.p.blob.handle = h;
     ev.p.blob.len = (uint32_t)nev_blob_len(h);
     return nev_bus_publish(&ev);
+}
+
+static nev_err_t publish_blob(nev_blob_t h) {
+    return publish_blob_of(NEV_EVT_BRIDGE_AGENT_TOKEN, h);
 }
 
 static void test_bus_retains_one_reference_per_accepted_delivery(void) {
@@ -302,16 +306,49 @@ static void test_flush_releases_queued_blobs(void) {
     TEST_ASSERT_FALSE(nev_bus_recv(s, &got, NEV_NO_WAIT));
 }
 
+/*
+ * A streamed reply must survive a coalescing subscriber.
+ *
+ * This is the regression test for a bug that reached a screenshot: the shell
+ * coalesces, and an eleven-token reply arrived as its last word. No event was
+ * dropped and no counter moved — each had been faithfully replaced by the next.
+ */
+static void test_a_token_stream_is_never_coalesced(void) {
+    nev_sub_t *s = sub_named("ui", NEV_DOM(BRIDGE), 8, NEV_FULL_DROP_NEWEST, true);
+
+    const char *words[] = {"the ", "kettle ", "is ", "boiling."};
+    for (size_t i = 0; i < 4; i++) {
+        nev_blob_t h = make_blob(words[i]);
+        TEST_ASSERT_EQUAL_INT(NEV_OK, publish_blob(h));
+        nev_blob_release(h);
+    }
+
+    char assembled[64] = {0};
+    nev_event_t got;
+    int seen = 0;
+    while (nev_bus_recv(s, &got, NEV_NO_WAIT)) {
+        strncat(assembled, (const char *)nev_blob_data(got.p.blob.handle),
+                sizeof(assembled) - strlen(assembled) - 1);
+        nev_blob_release(got.p.blob.handle);
+        seen++;
+    }
+    TEST_ASSERT_EQUAL_INT_MESSAGE(4, seen, "a fragment stream was coalesced");
+    TEST_ASSERT_EQUAL_STRING("the kettle is boiling.", assembled);
+    TEST_ASSERT_TRUE(nev_blob_all_free());
+}
+
+/* A partial transcript, by contrast, is a snapshot: the schema says each one
+ * replaces the last, so coalescing it is correct and the older blob must go. */
 static void test_coalescing_releases_the_replaced_events_blob(void) {
     nev_sub_t *s = sub_named("a", NEV_DOM(BRIDGE), 4, NEV_FULL_DROP_NEWEST, true);
 
     nev_blob_t first = make_blob("stale");
-    TEST_ASSERT_EQUAL_INT(NEV_OK, publish_blob(first));
+    TEST_ASSERT_EQUAL_INT(NEV_OK, publish_blob_of(NEV_EVT_BRIDGE_TRANSCRIPT_PARTIAL, first));
     nev_blob_release(first);
     TEST_ASSERT_EQUAL_UINT32(1, nev_blob_refcount(first));
 
     nev_blob_t second = make_blob("fresh");
-    TEST_ASSERT_EQUAL_INT(NEV_OK, publish_blob(second));
+    TEST_ASSERT_EQUAL_INT(NEV_OK, publish_blob_of(NEV_EVT_BRIDGE_TRANSCRIPT_PARTIAL, second));
     nev_blob_release(second);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, nev_blob_refcount(first), "replaced blob not released");
 
@@ -443,6 +480,7 @@ int main(void) {
     RUN_TEST(test_eviction_releases_the_evicted_events_blob);
     RUN_TEST(test_flush_releases_queued_blobs);
     RUN_TEST(test_coalescing_releases_the_replaced_events_blob);
+    RUN_TEST(test_a_token_stream_is_never_coalesced);
     RUN_TEST(test_dropping_subscriber_is_reported_on_the_bus);
     RUN_TEST(test_invalid_subscriptions_are_refused);
     RUN_TEST(test_slot_exhaustion_is_refused_not_overrun);

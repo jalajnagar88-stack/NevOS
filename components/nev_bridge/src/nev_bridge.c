@@ -437,10 +437,18 @@ void nev_bridge_poll(void) {
 
     if (s_bridge.state == NEV_BRIDGE_SEARCHING || s_bridge.state == NEV_BRIDGE_OFFLINE) return;
 
-    /* Drain everything the socket has. One poll per frame would make a burst of
-     * agent tokens arrive one every 33 ms, which reads as the model thinking
-     * slowly rather than as the device being behind. */
-    for (;;) {
+    /*
+     * Several messages per poll, but not unboundedly many.
+     *
+     * One per poll would make a burst of agent tokens arrive one every 33 ms,
+     * which reads as the model thinking slowly rather than as the device being
+     * behind. All of them would overrun the subscriber rings downstream, and
+     * the first half of a reply would be evicted before anything drew it.
+     *
+     * What is left stays in the socket, where TCP's own window holds it — a far
+     * better backlog than a ring of 32-byte slots on a device with 512 KB.
+     */
+    for (int budget = 6; budget > 0; budget--) {
         const uint8_t *payload = NULL;
         size_t payload_len = 0;
         nev_ws_event_t ev = nev_ws_poll(&s_bridge.ws, &payload, &payload_len);

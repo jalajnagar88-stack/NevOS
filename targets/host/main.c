@@ -18,6 +18,7 @@
 #include "nev_board/board_sim.h"
 #include "nev_kernel/nev_blob.h"
 #include "nev_kernel/nev_bus.h"
+#include "nev_bridge/nev_bridge.h"
 #include "nev_appkit/shell.h"
 #include "nev_kernel/nev_store.h"
 #include "nev_persona/persona.h"
@@ -234,13 +235,18 @@ typedef struct {
     const char *app_id;
     const char *settings_path;
     bool play;
+    bool bridge;
+    /* One scripted tap, so a screenshot can show what a button does rather
+     * than only what a screen looks like before anyone touches it. */
+    int32_t tap_x, tap_y;
+    uint32_t tap_frame;
 } options_t;
 
 static void usage(const char *argv0) {
     fprintf(stderr,
             "usage: %s [--persona] [--boot] [--script] [--mood NAME]\n"
             "          [--app ID] [--settings PATH] [--play]\n"
-            "          [--frames N] [--shot PATH.ppm]\n"
+            "          [--bridge] [--tap X,Y,FRAME] [--frames N] [--shot PATH.ppm]\n"
             "          [--strip DIR] [--strip-every N]\n",
             argv0);
     exit(2);
@@ -266,7 +272,15 @@ static options_t parse_args(int argc, char **argv) {
             o.boot = true;
         else if (!strcmp(a, "--play"))
             o.play = true;
-        else if (!strcmp(a, "--app") && i + 1 < argc)
+        else if (!strcmp(a, "--bridge"))
+            o.bridge = true;
+        else if (!strcmp(a, "--tap") && i + 1 < argc) {
+            unsigned x = 0, y = 0, f = 0;
+            if (sscanf(argv[++i], "%u,%u,%u", &x, &y, &f) != 3) usage(argv[0]);
+            o.tap_x = (int32_t)x;
+            o.tap_y = (int32_t)y;
+            o.tap_frame = f;
+        } else if (!strcmp(a, "--app") && i + 1 < argc)
             o.app_id = argv[++i];
         else if (!strcmp(a, "--settings") && i + 1 < argc)
             o.settings_path = argv[++i];
@@ -295,10 +309,24 @@ int main(int argc, char **argv) {
 
     /*
      * The simulator knows what time it is; the device does not until the daemon
-     * tells it at M6. Seeding it here means the shell and clock can be seen
-     * working without pretending the device has an RTC it does not have.
+     * tells it. Seeding it here means the shell and clock can be seen working
+     * without pretending the device has an RTC it does not have — except with
+     * --bridge, where leaving it unset is the point: the daemon sets it, and
+     * that path should be exercised rather than papered over.
      */
-    nev_wallclock_set((uint64_t)time(NULL));
+    if (!opt.bridge) nev_wallclock_set((uint64_t)time(NULL));
+
+    /*
+     * Opt-in, because it reaches the network.
+     *
+     * With it, the simulator finds a real nevosd on this machine and pairs with
+     * it — the same code the device runs, against the same daemon. Without it,
+     * headless runs stay hermetic, which is what CI needs.
+     */
+    if (opt.bridge) {
+        nev_bridge_init();
+        NEV_LOGI(TAG, "bridge enabled; looking for a daemon");
+    }
 
     (void)nev_store_set_num(NEV_SET_BOOT_COUNT, nev_store_num(NEV_SET_BOOT_COUNT) + 1);
 
@@ -342,7 +370,21 @@ int main(int argc, char **argv) {
 
         if (opt.script) run_script(now_ms, &script_cursor);
         if (opt.play) drive_play(frame_no++);
+        if (opt.tap_frame != 0) {
+            /* Down and up on consecutive frames: LVGL needs to see both edges
+             * to call it a click. */
+            if (frame_no == opt.tap_frame) {
+                nev_board_sim_inject_touch((int16_t)opt.tap_x, (int16_t)opt.tap_y, NEV_TOUCH_DOWN);
+            } else if (frame_no == opt.tap_frame + 1) {
+                nev_board_sim_inject_touch((int16_t)opt.tap_x, (int16_t)opt.tap_y, NEV_TOUCH_UP);
+            }
+            if (!opt.play) frame_no++;
+        }
         input_service_poll(now_ms);
+        /* On the device this runs on the network task, not here. In the
+         * simulator there is one thread, and the bridge never blocks, so the
+         * frame budget survives it. */
+        if (opt.bridge) nev_bridge_poll();
         nev_store_tick(now_ms);
         if (opt.persona) nev_persona_tick(now_ms);
         if (shell_mode) nev_shell_tick(now_ms);
@@ -390,6 +432,7 @@ int main(int argc, char **argv) {
         rc = 1;
     }
 
+    if (opt.bridge) nev_bridge_stop();
     if (opt.persona) nev_persona_deinit();
     if (shell_mode) nev_shell_deinit();
     nev_store_deinit();

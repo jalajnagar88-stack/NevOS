@@ -175,12 +175,23 @@ middle.
 
 ### Coalescing
 
-With `.coalesce = true`, if the newest event already queued has the same
-`type`, the publish overwrites it in place instead of enqueuing. This matters
-for genuinely high-rate streams: the IMU produces samples at 100 Hz while the
-UI task wakes at 30 Hz, and the UI wants the current tilt, not a backlog of
-stale ones. Coalescing is opt-in per subscriber, never per publisher — the
-consumer is the one that knows whether it wants the latest or all of them.
+With `.coalesce = true`, if an event of the same `type` is already queued, the
+publish overwrites it in place instead of enqueuing. This matters for genuinely
+high-rate streams: the IMU produces samples at 100 Hz while the UI task wakes at
+30 Hz, and the UI wants the current tilt, not a backlog of stale ones.
+
+**Two things must agree before an event is coalesced.** The subscriber opts in,
+and the *type* must be one `nev_evt_is_coalescable()` allows. Coalescing is only
+correct for an event that is a snapshot of state — the current tilt, the latest
+battery reading, the best transcript so far. An event that is a fragment, such
+as one token of a streamed reply, carries content that exists nowhere else, and
+replacing it deletes it.
+
+That second condition was added after a coalescing subscriber reduced a streamed
+agent reply to its final word: the screen read `say.` where the daemon had sent
+a sentence. Nothing overflowed and no counter moved — each event had been
+faithfully replaced by the next. A new event type is not coalescable unless it
+is added to that list, which is the safe default for exactly this reason.
 
 ### Overflow is visible
 

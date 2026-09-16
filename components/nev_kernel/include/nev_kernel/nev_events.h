@@ -132,6 +132,26 @@ enum nev_event_type {
         NEV_EVT_NONE = 0
 };
 
+/*
+ * May a queued event of this type be overwritten by a newer one?
+ *
+ * Coalescing is only ever correct for an event that is a *snapshot of state*:
+ * the current tilt, the latest battery reading, the best transcript so far. An
+ * event that is a *fragment* — one token of a reply, a finished transcript, a
+ * notification — carries content that does not exist anywhere else, and
+ * replacing it deletes it.
+ *
+ * This was found the expensive way. A subscriber with .coalesce = true reduced
+ * a streamed agent reply to its last word, and the screen said "say." where the
+ * daemon had sent a sentence. Nothing was dropped, nothing overflowed, and no
+ * counter moved: the event had been faithfully replaced, over and over.
+ *
+ * So the decision is not the subscriber's alone. The subscriber says whether it
+ * is willing to coalesce; this table says which types it is safe to do it to,
+ * and the default for a new event type is no.
+ */
+bool nev_evt_is_coalescable(uint16_t type);
+
 /* Human-readable name, e.g. "INPUT.TOUCH". Never NULL; unknown types render as hex. */
 const char *nev_evt_name(uint16_t type);
 const char *nev_domain_name(uint8_t domain_id);

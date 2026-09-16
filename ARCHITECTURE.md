@@ -221,10 +221,23 @@ its own design note, not derived from any existing title.
 ### L6 — `nev_bridge`
 
 Length-prefixed CBOR over a device-initiated WebSocket. The wire schema lives
-in exactly one place — `schema/nevos.proto.yaml` — and `tools/schema/gen.py`
-emits both the C structs/codec and the Rust types. Neither side can drift
-because neither side is hand-written. Round-trip and fuzz tests run in CI on
-both languages against shared golden vectors.
+in exactly one place — `schema/nevos.toml` — and `tools/schema/gen.py` emits
+both the C structs/codec and the Rust types. Neither side can drift because
+neither side is hand-written. Round-trip and fuzz tests run in CI on both
+languages against shared golden vectors.
+
+The transport is portable C over a socket shim at L-1 (`nev_port/nev_net.h`)
+rather than `esp_websocket_client` and ESP-IDF's mDNS component, which would
+each have been one line of configuration. The reason is the second constraint in
+the brief: a bridge built on device-only components can only be debugged on the
+device, and a handshake, a frame codec, a reconnect policy and a pairing flow
+are a great deal of logic to debug through a serial log. As written, the whole
+bridge runs on the host and talks to the real daemon —
+`./tools/build.sh bridge-live` does exactly that.
+
+`nev_net_posix.c` is a single implementation for both targets: ESP-IDF's lwIP
+serves the BSD socket API under the standard headers. The only differences are
+link state, which the board reports, and lwIP's smaller socket count.
 
 ---
 

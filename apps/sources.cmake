@@ -16,6 +16,9 @@ set(NEV_APP_SRCS
   ${NEV_APPS_DIR}/games/match/match_core.c
   ${NEV_APPS_DIR}/system/settings/settings_app.c
   ${NEV_APPS_DIR}/system/clock/clock_app.c
+  ${NEV_APPS_DIR}/system/link/link_app.c
+  ${NEV_APPS_DIR}/productivity/agent/agent_app.c
+  ${NEV_APPS_DIR}/productivity/notes/notes_app.c
 )
 
 # Game rules live in <game>_core.c with no LVGL dependency, so they can be
