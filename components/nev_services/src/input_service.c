@@ -7,6 +7,8 @@
 #define TAG "input"
 
 static lv_indev_t *s_pointer;
+static nev_touch_t s_last_touch;
+static bool s_touch_down;
 static uint8_t s_buttons;  /* debounced state as last published */
 static uint8_t s_raw_last; /* last raw read, for debouncing     */
 static uint32_t s_raw_since_ms;
@@ -39,6 +41,7 @@ nev_err_t input_service_init(void) {
 
     s_buttons = 0;
     s_raw_last = 0;
+    s_touch_down = false;
     s_ready = true;
     NEV_LOGI(TAG, "touch and buttons ready");
     return NEV_OK;
@@ -57,8 +60,47 @@ static void publish_button(uint16_t type, uint8_t id) {
     (void)nev_bus_publish(&ev);
 }
 
+/*
+ * Touch reaches widgets through LVGL's own pull, but INPUT.TOUCH also has to
+ * exist on the bus: the persona reacts to taps and the games read gestures, and
+ * neither of them owns a widget tree to hang a callback on. Published on
+ * transitions only — a held finger is one DOWN, not thirty a second.
+ */
+static void publish_touch(const nev_touch_t *t) {
+    nev_event_t ev = nev_event_make(NEV_EVT_INPUT_TOUCH, NEV_SRC_INPUT);
+    /* nev_touch_t and nev_p_touch_t are deliberately separate types even though
+     * they currently match: the event vocabulary is a contract that outlives any
+     * particular driver struct, and coupling them would make a board change a
+     * bus change. Copied field by field so a divergence is a compile error. */
+    ev.p.touch.x = t->x;
+    ev.p.touch.y = t->y;
+    ev.p.touch.action = t->action;
+    ev.p.touch.finger = t->finger;
+    (void)nev_bus_publish(&ev);
+}
+
+static void poll_touch(void) {
+    nev_touch_t t;
+    const bool down = nev_board_touch_read(&t) && t.action != NEV_TOUCH_UP;
+
+    if (down && !s_touch_down) {
+        t.action = NEV_TOUCH_DOWN;
+        publish_touch(&t);
+        s_last_touch = t;
+        s_touch_down = true;
+    } else if (!down && s_touch_down) {
+        s_last_touch.action = NEV_TOUCH_UP;
+        publish_touch(&s_last_touch);
+        s_touch_down = false;
+    } else if (down) {
+        s_last_touch = t; /* remember where the finger was, for the UP */
+    }
+}
+
 void input_service_poll(uint32_t now_ms) {
     if (!s_ready) return;
+
+    poll_touch();
 
     const uint8_t raw = nev_board_buttons_read();
 

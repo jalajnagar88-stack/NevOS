@@ -170,6 +170,56 @@ static void run_script(uint32_t now_ms, size_t *cursor) {
     }
 }
 
+/* ------------------------------------------------------------ input driving */
+
+/*
+ * Headless input injection, so a game can be verified and captured without a
+ * person to tap the screen. It drives the board's injection API, which means
+ * the events travel the real path — board, input_service, LVGL and the bus —
+ * rather than calling into the game directly.
+ */
+/*
+ * Drives a tap to start, then repeated swipes in varying directions.
+ *
+ * Swipes, not the single hardware button. Button A only turns left, so a driver
+ * built on it can only ever spiral: the first version of this ran 900 frames
+ * without eating once, and "passed" while exercising almost none of the game.
+ *
+ * Injection goes through the board, so the input travels the real path —
+ * board, input_service, LVGL's gesture recogniser and the bus — rather than
+ * calling into the game directly.
+ */
+#define SWIPE_FRAMES 6
+#define SWIPE_GAP    22
+#define SWIPE_PX     90
+
+static void drive_play(uint32_t frame) {
+    /* A tap is a press and a release on separate frames: LVGL has to see the
+     * indev held and then let go before it reports a click. */
+    if (frame == 10) nev_board_sim_inject_touch(240, 250, NEV_TOUCH_DOWN);
+    if (frame == 12) nev_board_sim_inject_touch(240, 250, NEV_TOUCH_UP);
+    if (frame < 20) return;
+
+    static const int8_t kDir[4][2] = {{1, 0}, {0, 1}, {-1, 0}, {0, -1}};
+    static uint32_t lcg = 0x2545F491u;
+    static uint8_t dir = 0;
+
+    const uint32_t phase = (frame - 20) % (SWIPE_FRAMES + SWIPE_GAP);
+    if (phase == 0) {
+        lcg = lcg * 1664525u + 1013904223u;
+        dir = (uint8_t)((lcg >> 24) & 3u);
+        nev_board_sim_inject_touch(240, 250, NEV_TOUCH_DOWN);
+    } else if (phase < SWIPE_FRAMES) {
+        /* Travel far enough to clear LVGL's gesture threshold. */
+        const int16_t step = (int16_t)(SWIPE_PX * (int)phase / (SWIPE_FRAMES - 1));
+        nev_board_sim_inject_touch((int16_t)(240 + kDir[dir][0] * step),
+                                   (int16_t)(250 + kDir[dir][1] * step), NEV_TOUCH_MOVE);
+    } else if (phase == SWIPE_FRAMES) {
+        nev_board_sim_inject_touch((int16_t)(240 + kDir[dir][0] * SWIPE_PX),
+                                   (int16_t)(250 + kDir[dir][1] * SWIPE_PX), NEV_TOUCH_UP);
+    }
+}
+
 /* --------------------------------------------------------------- arguments */
 
 typedef struct {
@@ -183,12 +233,13 @@ typedef struct {
     const char *mood_name;
     const char *app_id;
     const char *settings_path;
+    bool play;
 } options_t;
 
 static void usage(const char *argv0) {
     fprintf(stderr,
             "usage: %s [--persona] [--boot] [--script] [--mood NAME]\n"
-            "          [--app ID] [--settings PATH]\n"
+            "          [--app ID] [--settings PATH] [--play]\n"
             "          [--frames N] [--shot PATH.ppm]\n"
             "          [--strip DIR] [--strip-every N]\n",
             argv0);
@@ -213,6 +264,8 @@ static options_t parse_args(int argc, char **argv) {
             o.persona = true;
         else if (!strcmp(a, "--boot"))
             o.boot = true;
+        else if (!strcmp(a, "--play"))
+            o.play = true;
         else if (!strcmp(a, "--app") && i + 1 < argc)
             o.app_id = argv[++i];
         else if (!strcmp(a, "--settings") && i + 1 < argc)
@@ -250,7 +303,8 @@ int main(int argc, char **argv) {
     (void)nev_store_set_num(NEV_SET_BOOT_COUNT, nev_store_num(NEV_SET_BOOT_COUNT) + 1);
 
     const nev_sub_cfg_t cfg = {.name = "shell",
-                               .domains = NEV_DOM(DISPLAY) | NEV_DOM(SYS) | NEV_DOM(PERSONA),
+                               .domains = NEV_DOM(DISPLAY) | NEV_DOM(SYS) | NEV_DOM(PERSONA) |
+                                          NEV_DOM(GAME),
                                .depth = 8,
                                .full_policy = NEV_FULL_DROP_OLDEST,
                                .coalesce = true};
@@ -280,12 +334,14 @@ int main(int argc, char **argv) {
 
     size_t script_cursor = 0;
     uint32_t strip_index = 0;
+    uint32_t frame_no = 0;
     bool running = true;
 
     while (running) {
         const uint32_t now_ms = nev_now_ms();
 
         if (opt.script) run_script(now_ms, &script_cursor);
+        if (opt.play) drive_play(frame_no++);
         input_service_poll(now_ms);
         nev_store_tick(now_ms);
         if (opt.persona) nev_persona_tick(now_ms);
@@ -301,6 +357,12 @@ int main(int argc, char **argv) {
             if (ev.type == NEV_EVT_PERSONA_MOOD_CHANGED && s_mood_label) {
                 lv_label_set_text(s_mood_label, nev_mood_name((nev_mood_t)ev.p.mood.mood));
                 lv_obj_align(s_mood_label, LV_ALIGN_BOTTOM_MID, 0, -16);
+            }
+            /* Headless runs have no screen to watch, so the game's own events
+             * are the only way to see whether it is being played. */
+            if (ev.type == NEV_EVT_GAME_SCORE || ev.type == NEV_EVT_GAME_OVER) {
+                NEV_LOGI(TAG, "%s score=%u best=%u", nev_evt_name(ev.type),
+                         (unsigned)ev.p.score.score, (unsigned)ev.p.score.best);
             }
             if (ev.flags & NEV_EVF_BLOB) nev_blob_release(ev.p.blob.handle);
         }

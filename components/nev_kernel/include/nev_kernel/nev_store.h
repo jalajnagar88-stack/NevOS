@@ -53,6 +53,7 @@ extern "C" {
     X(PAIR_TOKEN, STR, "pair_token", "", 0, 63)                                                    \
     /* game high scores, owned by the shared table in game_engine */                               \
     X(HS_SNAKE, U32, "hs_snake", "0", 0, 999999)                                                   \
+    X(SNAKE_WRAP, BOOL, "snake_wrap", "0", 0, 1)                                                   \
     X(HS_BREAKOUT, U32, "hs_breakout", "0", 0, 999999)                                             \
     X(HS_RUNNER, U32, "hs_runner", "0", 0, 999999)                                                 \
     X(HS_MATCH, U32, "hs_match", "0", 0, 999999)                                                   \

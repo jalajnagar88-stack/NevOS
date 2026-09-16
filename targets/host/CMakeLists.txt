@@ -18,6 +18,7 @@ include(${NEVOS_ROOT}/cmake/nevos_host.cmake)
 include(${NEVOS_ROOT}/components/nev_board/sources.cmake)
 include(${NEVOS_ROOT}/components/nev_services/sources.cmake)
 include(${NEVOS_ROOT}/components/nev_appkit/sources.cmake)
+include(${NEVOS_ROOT}/apps/game_engine/sources.cmake)
 include(${NEVOS_ROOT}/apps/sources.cmake)
 
 if(NOT EXISTS ${NEVOS_ROOT}/third_party/lvgl/lvgl.h)
@@ -72,22 +73,27 @@ target_link_libraries(nevos_appkit PUBLIC nevos_core lvgl)
 # Apps self-register from constructors, so the linker must not discard them for
 # having no referenced symbol. Whole-archive is what keeps "adding an app is
 # adding a folder" true.
+add_library(nevos_game STATIC ${NEV_GAME_SRCS})
+target_include_directories(nevos_game PUBLIC ${NEV_GAME_INCLUDE_DIRS})
+target_link_libraries(nevos_game PUBLIC nevos_appkit)
+
 add_library(nevos_apps STATIC ${NEV_APP_SRCS})
-target_link_libraries(nevos_apps PUBLIC nevos_appkit)
+target_include_directories(nevos_apps PRIVATE ${NEV_GAME_RULE_INCLUDE_DIRS})
+target_link_libraries(nevos_apps PUBLIC nevos_appkit nevos_game)
 
 # ----------------------------------------------------------------- simulator
 add_executable(nevos_sim main.c)
 target_link_libraries(nevos_sim PRIVATE
-  nevos_services nevos_persona nevos_appkit nevos_board nevos_core lvgl)
+  nevos_services nevos_persona nevos_appkit nevos_game nevos_board nevos_core lvgl)
 
-# Force-link the apps archive so self-registering translation units survive.
-if(APPLE)
-  target_link_libraries(nevos_sim PRIVATE -Wl,-force_load,$<TARGET_FILE:nevos_apps>)
-else()
-  target_link_libraries(nevos_sim PRIVATE
-    -Wl,--whole-archive $<TARGET_FILE:nevos_apps> -Wl,--no-whole-archive)
-endif()
-add_dependencies(nevos_sim nevos_apps)
+# Force-link the apps archive so self-registering translation units survive: an
+# app's only symbol is its constructor, and nothing references it.
+#
+# LINK_LIBRARY:WHOLE_ARCHIVE rather than a raw -Wl flag. The raw flag does not
+# take part in CMake's dependency ordering, so the archive landed after the
+# libraries it needs and the engine's symbols came up undefined. This also
+# spells itself correctly on both GNU ld and Apple's -force_load.
+target_link_libraries(nevos_sim PRIVATE "$<LINK_LIBRARY:WHOLE_ARCHIVE,nevos_apps>")
 set_target_properties(nevos_sim PROPERTIES C_STANDARD 11 C_EXTENSIONS ON)
 
 message(STATUS "NEVOS: board=${NEVOS_BOARD} display=${NEVOS_DISPLAY}")

@@ -342,6 +342,13 @@ nev_err_t nev_shell_init(lv_obj_t *screen) {
     lv_obj_set_size(s_content, NEV_SCREEN_W, NEV_CONTENT_H);
     lv_obj_set_pos(s_content, 0, NEV_STATUS_BAR_H);
     lv_obj_remove_flag(s_content, LV_OBJ_FLAG_SCROLLABLE);
+    /*
+     * LVGL sets LV_OBJ_FLAG_GESTURE_BUBBLE on every object that has a parent
+     * (lv_obj.c: `if(parent) obj->flags |= LV_OBJ_FLAG_GESTURE_BUBBLE`), so a
+     * gesture is delivered to the topmost ancestor, not to the object that was
+     * touched. A handler attached here never fires until the flag is cleared.
+     */
+    lv_obj_remove_flag(s_content, LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_add_event_cb(s_content, content_gesture_cb, LV_EVENT_GESTURE, NULL);
 
     build_home();

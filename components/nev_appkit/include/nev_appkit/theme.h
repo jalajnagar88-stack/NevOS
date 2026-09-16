@@ -34,42 +34,50 @@ extern "C" {
 #define NEV_COL_WARN        lv_color_hex(0xE8A33D)
 #define NEV_COL_DANGER      lv_color_hex(0xF2545B)
 
+/*
+ * Game palette. Six hues that stay distinguishable from each other at a glance
+ * and, more importantly, differ in lightness as well as hue — so a tile-matching
+ * board is still playable by someone who cannot tell red from green.
+ */
+#define NEV_PLAY_COLORS     6
+lv_color_t nev_theme_play_color(uint8_t index);
+
 /* ----------------------------------------------------------------- spacing */
 /* A 4px base step. Every gap in NEVOS is one of these; arbitrary padding is
  * how a UI stops looking like one thing. */
-#define NEV_SP_1            4
-#define NEV_SP_2            8
-#define NEV_SP_3            12
-#define NEV_SP_4            16
-#define NEV_SP_5            24
-#define NEV_SP_6            32
-#define NEV_SP_7            48
+#define NEV_SP_1         4
+#define NEV_SP_2         8
+#define NEV_SP_3         12
+#define NEV_SP_4         16
+#define NEV_SP_5         24
+#define NEV_SP_6         32
+#define NEV_SP_7         48
 
 /* ------------------------------------------------------------------ radius */
-#define NEV_RADIUS_SM       6
-#define NEV_RADIUS_MD       12
-#define NEV_RADIUS_LG       20
-#define NEV_RADIUS_FULL     LV_RADIUS_CIRCLE
+#define NEV_RADIUS_SM    6
+#define NEV_RADIUS_MD    12
+#define NEV_RADIUS_LG    20
+#define NEV_RADIUS_FULL  LV_RADIUS_CIRCLE
 
 /* -------------------------------------------------------------- type scale */
-#define NEV_FONT_DISPLAY    (&lv_font_montserrat_48)
-#define NEV_FONT_TITLE      (&lv_font_montserrat_28)
-#define NEV_FONT_BODY       (&lv_font_montserrat_14)
-#define NEV_FONT_CAPTION    (&lv_font_montserrat_14)
+#define NEV_FONT_DISPLAY (&lv_font_montserrat_48)
+#define NEV_FONT_TITLE   (&lv_font_montserrat_28)
+#define NEV_FONT_BODY    (&lv_font_montserrat_14)
+#define NEV_FONT_CAPTION (&lv_font_montserrat_14)
 
 /* ------------------------------------------------------------------ layout */
-#define NEV_STATUS_BAR_H    34
-#define NEV_SCREEN_W        480
-#define NEV_SCREEN_H        480
-#define NEV_CONTENT_H       (NEV_SCREEN_H - NEV_STATUS_BAR_H)
+#define NEV_STATUS_BAR_H 34
+#define NEV_SCREEN_W     480
+#define NEV_SCREEN_H     480
+#define NEV_CONTENT_H    (NEV_SCREEN_H - NEV_STATUS_BAR_H)
 
 /* A touch target smaller than this is a target you miss. */
-#define NEV_TOUCH_MIN       44
+#define NEV_TOUCH_MIN    44
 
 /* ------------------------------------------------------------------ motion */
-#define NEV_ANIM_FAST       140
-#define NEV_ANIM_NORMAL     220
-#define NEV_ANIM_SLOW       360
+#define NEV_ANIM_FAST    140
+#define NEV_ANIM_NORMAL  220
+#define NEV_ANIM_SLOW    360
 
 /* Applies the ground colour and removes scrolling from a full-screen object. */
 void nev_theme_apply_screen(lv_obj_t *obj);
