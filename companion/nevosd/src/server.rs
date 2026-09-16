@@ -15,8 +15,11 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use futures_util::{SinkExt, StreamExt};
 use nevos_agent::{AgentEvent, AgentRequest, Turn};
-use nevos_proto::{frame_split, AgentDone, AgentToken, MoodHint, Notification, TranscriptFinal};
+use nevos_proto::{
+    frame_split, AgentDone, AgentToken, MoodHint, Notification, TranscriptFinal, TranscriptPartial,
+};
 use nevos_store::{now_unix, Record, RecordKind};
+use tokio::sync::mpsc::Sender as MpscSender;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -27,7 +30,7 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use crate::pairing::EntryOutcome;
-use crate::session::{Action, Out, Session};
+use crate::session::{Action, Out, Session, SAMPLE_RATE};
 use crate::state::Daemon;
 
 /// A device that has said nothing at all for this long is gone, whatever the
@@ -38,6 +41,16 @@ const IDLE_TIMEOUT: Duration = Duration::from_secs(90);
 /// The wire cap is 512 bytes per token frame; this leaves room for the rest of
 /// the CBOR array without having to reason about its exact encoded size.
 const TOKEN_CHUNK_BYTES: usize = 384;
+
+/// How much audio a long capture transcribes at a time.
+///
+/// Long enough that whisper has sentences to work with rather than fragments —
+/// it is much worse at three-second slices than at thirty-second ones — and
+/// short enough that words appear on the device while the meeting is still
+/// happening. It also bounds what is in memory: thirty seconds is under a
+/// megabyte, where the whole meeting would be a hundred.
+const SEGMENT_SECS: usize = 30;
+const SEGMENT_SAMPLES: usize = SAMPLE_RATE as usize * SEGMENT_SECS;
 
 /// A pairing attempt the user never completes. The device is told, so it can
 /// stop showing a code that will not work rather than waiting indefinitely.
@@ -104,6 +117,9 @@ async fn connection(socket: WebSocket, state: Arc<Daemon>) {
     let mut was_capturing = false;
     let mut announced = false;
     let mut pairing_since: Option<Instant> = None;
+    // The long capture in progress, if any: its session id and the channel its
+    // task is listening on.
+    let mut capture: Option<(u32, MpscSender<CaptureMsg>)> = None;
 
     loop {
         let actions = tokio::select! {
@@ -182,6 +198,36 @@ async fn connection(socket: WebSocket, state: Arc<Daemon>) {
                 Action::AudioGap { session: s, expected, got } => {
                     tracing::warn!(session = s, expected, got, "dropped audio; transcript has a hole");
                 }
+                Action::CaptureChunk { session: s, pcm, last } => {
+                    let sender = match &capture {
+                        Some((id, tx)) if *id == s => tx.clone(),
+                        _ => {
+                            // A bound, not an unbounded queue: if transcription
+                            // falls behind, this fills, and the pressure is felt
+                            // here rather than as memory quietly climbing.
+                            let (ctx, crx) = mpsc::channel::<CaptureMsg>(64);
+                            let st = state.clone();
+                            let out = out_tx.clone();
+                            tokio::spawn(async move { capture_task(st, out, s, crx).await });
+                            tracing::info!(session = s, "capture started");
+                            capture = Some((s, ctx.clone()));
+                            ctx
+                        }
+                    };
+                    if sender.send(CaptureMsg::Pcm(pcm)).await.is_err() {
+                        capture = None;
+                    } else if last {
+                        let _ = sender.send(CaptureMsg::End).await;
+                        capture = None;
+                    }
+                }
+                Action::Marker { session: s, at_seconds } => {
+                    if let Some((id, tx)) = &capture {
+                        if *id == s {
+                            let _ = tx.send(CaptureMsg::Marker(at_seconds)).await;
+                        }
+                    }
+                }
                 Action::Utterance { session: s, pcm } => {
                     let state = state.clone();
                     let tx = out_tx.clone();
@@ -237,6 +283,11 @@ async fn connection(socket: WebSocket, state: Arc<Daemon>) {
 
     if was_capturing {
         state.capture_stopped();
+    }
+    // A meeting that ends because the device ran out of battery is still a
+    // meeting. Closing the channel makes the task file what it has.
+    if let Some((_, tx)) = capture.take() {
+        let _ = tx.send(CaptureMsg::End).await;
     }
     // A device that disconnects mid-pairing takes its code with it. Leaving the
     // request open would let the code be entered minutes later, against a
@@ -297,6 +348,138 @@ fn touch(state: &Arc<Daemon>, device_id: &str) {
     if let Err(e) = state.store.upsert_device(device) {
         tracing::warn!(error = %e, "could not update last_seen");
     }
+}
+
+/// What the capture task is told.
+enum CaptureMsg {
+    Pcm(Vec<i16>),
+    Marker(f32),
+    End,
+}
+
+/// Runs one long capture from start to finish.
+///
+/// A task of its own because it outlives any single frame of audio and has to
+/// do slow work — whisper on thirty seconds takes a few seconds — without the
+/// connection loop waiting on it. Audio arriving meanwhile queues in the
+/// channel, and a channel with a bound is how backpressure reaches the device
+/// rather than the memory.
+async fn capture_task(
+    state: Arc<Daemon>,
+    tx: mpsc::Sender<Out>,
+    session: u32,
+    mut rx: mpsc::Receiver<CaptureMsg>,
+) {
+    let id = format!("{}-meeting-{session}", now_unix());
+    let started = now_unix();
+    let mut segment: Vec<i16> = Vec::with_capacity(SEGMENT_SAMPLES);
+    let mut text = String::new();
+    let mut markers: Vec<f32> = Vec::new();
+    let mut audio: Vec<i16> = Vec::new();
+    let mut total_samples: usize = 0;
+
+    /* Transcribes one segment and appends it. Returns false if the device has
+     * gone, which ends the capture. */
+    async fn flush(
+        state: &Arc<Daemon>,
+        tx: &mpsc::Sender<Out>,
+        session: u32,
+        segment: &mut Vec<i16>,
+        text: &mut String,
+    ) -> bool {
+        if segment.is_empty() {
+            return true;
+        }
+        let pcm = std::mem::take(segment);
+        match state.stt.transcribe(&pcm, SAMPLE_RATE).await {
+            Ok(t) if !t.text.trim().is_empty() => {
+                if !text.is_empty() {
+                    text.push(' ');
+                }
+                text.push_str(t.text.trim());
+                // The device shows the latest line while the meeting runs. It
+                // is a partial by the schema's definition — each one replaces
+                // the last — so the newest is the only one worth keeping.
+                tx.send(Out::TranscriptPartial(TranscriptPartial {
+                    session,
+                    text: truncate_chars(t.text.trim(), 500),
+                }))
+                .await
+                .is_ok()
+            }
+            Ok(_) => true, // a silent segment: nothing said, nothing to add
+            Err(e) => {
+                // One failed segment must not end an hour-long meeting. The
+                // gap is recorded in the text, because a transcript with an
+                // unmarked hole is worse than one that admits to it.
+                tracing::error!(error = %e, "a capture segment failed to transcribe");
+                text.push_str(" […] ");
+                true
+            }
+        }
+    }
+
+    while let Some(msg) = rx.recv().await {
+        match msg {
+            CaptureMsg::Pcm(pcm) => {
+                total_samples += pcm.len();
+                if state.keep_audio {
+                    audio.extend_from_slice(&pcm);
+                }
+                segment.extend_from_slice(&pcm);
+                if segment.len() >= SEGMENT_SAMPLES
+                    && !flush(&state, &tx, session, &mut segment, &mut text).await
+                {
+                    return;
+                }
+            }
+            CaptureMsg::Marker(at) => {
+                tracing::info!(session, at, "marker");
+                markers.push(at);
+            }
+            CaptureMsg::End => break,
+        }
+    }
+
+    flush(&state, &tx, session, &mut segment, &mut text).await;
+
+    let seconds = total_samples as f32 / SAMPLE_RATE as f32;
+    tracing::info!(session, seconds, markers = markers.len(), "capture finished");
+
+    let audio_name = if state.keep_audio && !audio.is_empty() {
+        let wav = nevos_stt::wav_from_pcm(&audio, SAMPLE_RATE);
+        match state.store.save_audio(&id, &wav) {
+            Ok(path) => path.file_name().map(|n| n.to_string_lossy().to_string()),
+            Err(e) => {
+                tracing::warn!(error = %e, "could not save the capture audio");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    // Filed even when empty, so an hour of silence is a transcript that says
+    // nothing rather than a meeting that vanished.
+    let record = Record {
+        id,
+        kind: RecordKind::Transcript,
+        created_at: started,
+        text: text.trim().to_string(),
+        markers,
+        audio: audio_name,
+    };
+    if let Err(e) = state.store.save_record(&record) {
+        tracing::error!(error = %e, "could not save the transcript");
+    }
+
+    let _ = tx
+        .send(Out::TranscriptFinal(TranscriptFinal {
+            session,
+            text: truncate_chars(&record.text, 500),
+            confidence: 0.0,
+        }))
+        .await;
 }
 
 /// Transcribes one utterance and files it.

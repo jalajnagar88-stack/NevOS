@@ -16,6 +16,7 @@ pub enum MsgId {
     Ping = 5,
     Pong = 6,
     AudioChunk = 16,
+    CaptureMarker = 19,
     TranscriptPartial = 17,
     TranscriptFinal = 18,
     AgentRequest = 32,
@@ -36,6 +37,7 @@ impl MsgId {
             5 => Some(MsgId::Ping),
             6 => Some(MsgId::Pong),
             16 => Some(MsgId::AudioChunk),
+            19 => Some(MsgId::CaptureMarker),
             17 => Some(MsgId::TranscriptPartial),
             18 => Some(MsgId::TranscriptFinal),
             32 => Some(MsgId::AgentRequest),
@@ -57,6 +59,7 @@ impl MsgId {
             MsgId::Ping => "ping",
             MsgId::Pong => "pong",
             MsgId::AudioChunk => "audio_chunk",
+            MsgId::CaptureMarker => "capture_marker",
             MsgId::TranscriptPartial => "transcript_partial",
             MsgId::TranscriptFinal => "transcript_final",
             MsgId::AgentRequest => "agent_request",
@@ -338,6 +341,16 @@ pub struct AudioChunk {
     pub r#final: bool,
     /// 16 kHz mono signed 16-bit little-endian.
     pub pcm: Vec<u8>,
+    /// 0 for a dictated note, 1 for a long-form capture (meeting mode).
+    ///
+    /// The difference is what the daemon does with it, and the two are not the same
+    /// job: a note is a few seconds, transcribed in one go and filed when it ends,
+    /// while a capture runs for an hour, is transcribed in segments as it arrives, and
+    /// must never be held in memory whole.
+    ///
+    /// Appended after the fact, so an older device that does not send it gets 0 — which
+    /// is the behaviour it had before the field existed.
+    pub kind: u8,
 }
 
 impl AudioChunk {
@@ -345,12 +358,13 @@ impl AudioChunk {
 
     pub fn encode(&self) -> Vec<u8> {
         let mut w = CborWriter::new();
-        w.array(5);
+        w.array(6);
         w.u64(16);
         w.u64(self.seq as u64);
         w.u64(self.session as u64);
         w.bool(self.r#final);
         w.bytes(&self.pcm);
+        w.u64(self.kind as u64);
         w.finish()
     }
 
@@ -378,8 +392,60 @@ impl AudioChunk {
         if present > 3 {
             out.pcm = r.bytes(4096)?;
         }
+        if present > 4 {
+            let v = r.u64()?;
+            if v > u8::MAX as u64 { return Err(ProtoError::OutOfRange); }
+            out.kind = v as u8;
+        }
         // Fields appended by a newer peer are stepped over, not an error.
-        for _ in 4..present { r.skip()?; }
+        for _ in 5..present { r.skip()?; }
+        Ok(out)
+    }
+}
+
+/// The user pressed the button during a long capture. The daemon records the
+/// position in the transcript so it can be found again.
+/// Sent rather than inferred, because the point of a marker is that a person
+/// decided something mattered — and the device is the only thing that knows when
+/// they pressed it, to the second, while the daemon is still transcribing what was
+/// said a minute ago.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct CaptureMarker {
+    pub session: u32,
+    /// Seconds from the start of the capture, as the device counted them.
+    pub at_seconds: f32,
+}
+
+impl CaptureMarker {
+    pub const ID: u16 = 19;
+
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = CborWriter::new();
+        w.array(3);
+        w.u64(19);
+        w.u64(self.session as u64);
+        w.f32(self.at_seconds);
+        w.finish()
+    }
+
+    pub fn decode(buf: &[u8]) -> Result<Self, ProtoError> {
+        let mut r = CborReader::new(buf);
+        let count = r.array()?;
+        if count < 1 { return Err(ProtoError::Malformed); }
+        let id = r.u64()?;
+        if id != 19 { return Err(ProtoError::WrongMessage); }
+        let present = count - 1;
+        let mut out = Self::default();
+        if present > 0 {
+            let v = r.u64()?;
+            if v > u32::MAX as u64 { return Err(ProtoError::OutOfRange); }
+            out.session = v as u32;
+        }
+        if present > 1 {
+            out.at_seconds = r.f32()?;
+        }
+        // Fields appended by a newer peer are stepped over, not an error.
+        for _ in 2..present { r.skip()?; }
         Ok(out)
     }
 }

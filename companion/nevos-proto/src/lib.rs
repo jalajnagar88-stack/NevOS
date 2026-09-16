@@ -26,45 +26,10 @@ mod tests {
     /// Encoding must be byte-identical to the Python reference, which is also
     /// what the firmware is checked against. Canonical CBOR has exactly one
     /// encoding per value, so any difference means an implementation drifted.
-    macro_rules! golden_round_trip {
-        ($sample:ident, $bytes:ident, $ty:ty) => {
-            let want = $sample();
-            assert_eq!(
-                want.encode(),
-                $bytes,
-                "encoded bytes differ from the reference"
-            );
-            let decoded = <$ty>::decode($bytes).expect("failed to decode the reference bytes");
-            assert_eq!(decoded, want, "decoded fields differ from the reference");
-        };
-    }
-
-    #[test]
-    fn golden_vectors_match_byte_for_byte() {
-        golden_round_trip!(sample_hello, GOLDEN_HELLO, Hello);
-        golden_round_trip!(sample_hello_ack, GOLDEN_HELLO_ACK, HelloAck);
-        golden_round_trip!(sample_pair, GOLDEN_PAIR, Pair);
-        golden_round_trip!(sample_pair_result, GOLDEN_PAIR_RESULT, PairResult);
-        golden_round_trip!(sample_ping, GOLDEN_PING, Ping);
-        golden_round_trip!(sample_pong, GOLDEN_PONG, Pong);
-        golden_round_trip!(sample_audio_chunk, GOLDEN_AUDIO_CHUNK, AudioChunk);
-        golden_round_trip!(
-            sample_transcript_partial,
-            GOLDEN_TRANSCRIPT_PARTIAL,
-            TranscriptPartial
-        );
-        golden_round_trip!(
-            sample_transcript_final,
-            GOLDEN_TRANSCRIPT_FINAL,
-            TranscriptFinal
-        );
-        golden_round_trip!(sample_agent_request, GOLDEN_AGENT_REQUEST, AgentRequest);
-        golden_round_trip!(sample_agent_token, GOLDEN_AGENT_TOKEN, AgentToken);
-        golden_round_trip!(sample_agent_done, GOLDEN_AGENT_DONE, AgentDone);
-        golden_round_trip!(sample_mood_hint, GOLDEN_MOOD_HINT, MoodHint);
-        golden_round_trip!(sample_notification, GOLDEN_NOTIFICATION, Notification);
-        golden_round_trip!(sample_ota_available, GOLDEN_OTA_AVAILABLE, OtaAvailable);
-    }
+    // The byte-for-byte round trip for every message lives in golden.rs, which
+    // is generated: a list kept here would one day be missing the message
+    // somebody had just added, which is exactly the drift the vectors exist to
+    // catch. What stays in this file is what a generator cannot know to write.
 
     #[test]
     fn peek_reads_the_id_without_decoding() {

@@ -12,6 +12,29 @@
 #include <stdio.h>
 #include <string.h>
 
+/*
+ * Every message in the schema, so a test can iterate rather than keep its own
+ * list. A hand-written list is a list that will one day be missing the message
+ * someone just added — which is precisely the drift this file exists to catch.
+ */
+#define NEV_GOLDEN_FOR_EACH(X) \
+    X(hello) \
+    X(hello_ack) \
+    X(pair) \
+    X(pair_result) \
+    X(ping) \
+    X(pong) \
+    X(audio_chunk) \
+    X(capture_marker) \
+    X(transcript_partial) \
+    X(transcript_final) \
+    X(agent_request) \
+    X(agent_token) \
+    X(agent_done) \
+    X(mood_hint) \
+    X(notification) \
+    X(ota_available)
+
 static const uint8_t kGolden_hello[] = {
     0x85, 0x01, 0x07, 0x6B, 0x64, 0x65, 0x76, 0x69, 0x63, 0x65, 0x5F, 0x69, 0x64, 0x2D, 0x31, 0x6A, 0x66, 0x69, 0x72, 0x6D, 0x77, 0x61, 0x72, 0x65, 0x2D, 0x32, 0x67, 0x74, 0x6F, 0x6B, 0x65, 0x6E, 0x2D, 0x33
 };
@@ -81,7 +104,7 @@ static nev_msg_pong_t golden_sample_pong(void) {
 }
 
 static const uint8_t kGolden_audio_chunk[] = {
-    0x85, 0x10, 0x07, 0x0E, 0xF5, 0x48, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A
+    0x86, 0x10, 0x07, 0x0E, 0xF5, 0x48, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x18, 0x23
 };
 static const uint8_t kGolden_audio_chunk_pcm[] = {0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A};
 static nev_msg_audio_chunk_t golden_sample_audio_chunk(void) {
@@ -92,6 +115,18 @@ static nev_msg_audio_chunk_t golden_sample_audio_chunk(void) {
     s.final = true;
     s.pcm = kGolden_audio_chunk_pcm;
     s.pcm_len = sizeof(kGolden_audio_chunk_pcm);
+    s.kind = 35u;
+    return s;
+}
+
+static const uint8_t kGolden_capture_marker[] = {
+    0x83, 0x13, 0x07, 0xFA, 0x3F, 0xC0, 0x00, 0x00
+};
+static nev_msg_capture_marker_t golden_sample_capture_marker(void) {
+    nev_msg_capture_marker_t s;
+    memset(&s, 0, sizeof(s));
+    s.session = 7u;
+    s.at_seconds = 1.5f;
     return s;
 }
 

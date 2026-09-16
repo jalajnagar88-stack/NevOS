@@ -186,7 +186,10 @@ def gen_c_header(spec):
         for f in m.get("field", []):
             fdoc = (f.get("doc") or "").strip()
             if fdoc:
-                L.append(f"    /* {fdoc} */")
+                if "\n" in fdoc:
+                    L.append("    /* " + fdoc.replace("\n", "\n     * ") + " */")
+                else:
+                    L.append(f"    /* {fdoc} */")
             if f["type"] == "str":
                 L.append(f"    char {f['name']}[{f['max'] + 1}];")
             elif f["type"] == "bytes":
@@ -414,6 +417,15 @@ def gen_c_golden(spec):
         "#include <stdio.h>",
         "#include <string.h>",
         "",
+        "/*",
+        " * Every message in the schema, so a test can iterate rather than keep its own",
+        " * list. A hand-written list is a list that will one day be missing the message",
+        " * someone just added — which is precisely the drift this file exists to catch.",
+        " */",
+        "#define NEV_GOLDEN_FOR_EACH(X)"
+        + " \\\n"
+        + " \\\n".join(f"    X({m['name']})" for m in spec["message"]),
+        "",
     ]
     for m in spec["message"]:
         blob = encode_sample(m)
@@ -501,7 +513,8 @@ def gen_rust(spec):
         for f in m.get("field", []):
             fdoc = (f.get("doc") or "").strip()
             if fdoc:
-                L.append(f"    /// {fdoc}")
+                for line in fdoc.splitlines():
+                    L.append(f"    /// {line}".rstrip())
             L.append(f"    pub {rust_ident(f['name'])}: {rust_type(f)},")
         L.append("}")
         L.append("")
@@ -638,6 +651,28 @@ def gen_rust_golden(spec):
         L.append("    }")
         L.append("}")
         L.append("")
+
+    # The round trip for every message, generated rather than listed by hand: a
+    # message added to the schema is checked from the moment it exists, which is
+    # not true of any list a person has to remember to extend.
+    L += [
+        "#[cfg(test)]",
+        "mod golden_tests {",
+        "    use super::*;",
+        "",
+        "    #[test]",
+        "    fn every_message_matches_the_reference_bytes() {",
+    ]
+    for m in spec["message"]:
+        name, ty, konst = m["name"], pascal(m["name"]), m["name"].upper()
+        L += [
+            f"        let want = sample_{name}();",
+            f"        assert_eq!(want.encode(), GOLDEN_{konst}, \"{name}: encoded bytes differ from the reference\");",
+            f"        let got = {ty}::decode(GOLDEN_{konst}).expect(\"{name}: failed to decode the reference bytes\");",
+            f"        assert_eq!(got, want, \"{name}: decoded fields differ from the reference\");",
+            "",
+        ]
+    L += ["    }", "}", ""]
     return "\n".join(L)
 
 

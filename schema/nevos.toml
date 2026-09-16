@@ -156,6 +156,41 @@ doc = "One frame of captured microphone audio. Roughly 50 a second while recordi
   type = "bytes"
   max = 4096
   doc = "16 kHz mono signed 16-bit little-endian."
+  [[message.field]]
+  name = "kind"
+  type = "u8"
+  doc = """
+0 for a dictated note, 1 for a long-form capture (meeting mode).
+
+The difference is what the daemon does with it, and the two are not the same
+job: a note is a few seconds, transcribed in one go and filed when it ends,
+while a capture runs for an hour, is transcribed in segments as it arrives, and
+must never be held in memory whole.
+
+Appended after the fact, so an older device that does not send it gets 0 — which
+is the behaviour it had before the field existed.
+"""
+
+[[message]]
+name = "capture_marker"
+id = 19
+sender = "device"
+doc = """
+The user pressed the button during a long capture. The daemon records the
+position in the transcript so it can be found again.
+
+Sent rather than inferred, because the point of a marker is that a person
+decided something mattered — and the device is the only thing that knows when
+they pressed it, to the second, while the daemon is still transcribing what was
+said a minute ago.
+"""
+  [[message.field]]
+  name = "session"
+  type = "u32"
+  [[message.field]]
+  name = "at_seconds"
+  type = "f32"
+  doc = "Seconds from the start of the capture, as the device counted them."
 
 [[message]]
 name = "transcript_partial"

@@ -12,6 +12,7 @@ const char *nev_proto_name(uint16_t id) {
         case NEV_MSG_PING: return "ping";
         case NEV_MSG_PONG: return "pong";
         case NEV_MSG_AUDIO_CHUNK: return "audio_chunk";
+        case NEV_MSG_CAPTURE_MARKER: return "capture_marker";
         case NEV_MSG_TRANSCRIPT_PARTIAL: return "transcript_partial";
         case NEV_MSG_TRANSCRIPT_FINAL: return "transcript_final";
         case NEV_MSG_AGENT_REQUEST: return "agent_request";
@@ -286,13 +287,14 @@ nev_err_t nev_proto_encode_audio_chunk(const nev_msg_audio_chunk_t *msg, uint8_t
     if (!msg || !buf) return NEV_ERR_INVALID_ARG;
     nev_cbor_w_t w;
     nev_cbor_w_init(&w, buf, cap);
-    nev_cbor_w_array(&w, 5);
+    nev_cbor_w_array(&w, 6);
     nev_cbor_w_u64(&w, NEV_MSG_AUDIO_CHUNK);
     nev_cbor_w_u64(&w, msg->seq);
     nev_cbor_w_u64(&w, msg->session);
     nev_cbor_w_bool(&w, msg->final);
     if (msg->pcm_len > 4096u) return NEV_ERR_NO_SPACE;
     nev_cbor_w_bytes(&w, msg->pcm, msg->pcm_len);
+    nev_cbor_w_u64(&w, msg->kind);
     if (w.overflow) return NEV_ERR_NO_SPACE;
     if (out_len) *out_len = w.len;
     return NEV_OK;
@@ -329,8 +331,55 @@ nev_err_t nev_proto_decode_audio_chunk(const uint8_t *buf, size_t len, nev_msg_a
         if (blen > 4096u) return NEV_ERR_NO_SPACE;
         out->pcm_len = blen;
     }
+    if (present > 4) {
+        if (!nev_cbor_r_u32(&r, &tmp32)) return NEV_ERR_INVALID_ARG;
+        if (tmp32 > 0xFFu) return NEV_ERR_INVALID_ARG;
+        out->kind = (uint8_t)tmp32;
+    }
     /* Fields appended by a newer peer: stepped over, not an error. */
-    for (size_t i = 4; i < present; i++) {
+    for (size_t i = 5; i < present; i++) {
+        if (!nev_cbor_r_skip(&r)) return NEV_ERR_INVALID_ARG;
+    }
+    return NEV_OK;
+}
+
+nev_err_t nev_proto_encode_capture_marker(const nev_msg_capture_marker_t *msg, uint8_t *buf, size_t cap, size_t *out_len) {
+    if (!msg || !buf) return NEV_ERR_INVALID_ARG;
+    nev_cbor_w_t w;
+    nev_cbor_w_init(&w, buf, cap);
+    nev_cbor_w_array(&w, 3);
+    nev_cbor_w_u64(&w, NEV_MSG_CAPTURE_MARKER);
+    nev_cbor_w_u64(&w, msg->session);
+    nev_cbor_w_f32(&w, msg->at_seconds);
+    if (w.overflow) return NEV_ERR_NO_SPACE;
+    if (out_len) *out_len = w.len;
+    return NEV_OK;
+}
+
+nev_err_t nev_proto_decode_capture_marker(const uint8_t *buf, size_t len, nev_msg_capture_marker_t *out) {
+    if (!buf || !out) return NEV_ERR_INVALID_ARG;
+    memset(out, 0, sizeof(*out));
+    nev_cbor_r_t r;
+    nev_cbor_r_init(&r, buf, len);
+    size_t count = 0;
+    if (!nev_cbor_r_array(&r, &count) || count < 1) return NEV_ERR_INVALID_ARG;
+    uint32_t id = 0;
+    if (!nev_cbor_r_u32(&r, &id)) return NEV_ERR_INVALID_ARG;
+    if (id != NEV_MSG_CAPTURE_MARKER) return NEV_ERR_INVALID_ARG;
+    const size_t present = count - 1;
+    uint32_t tmp32 = 0;
+    uint64_t tmp64 = 0;
+    size_t blen = 0;
+    (void)tmp32; (void)tmp64; (void)blen;
+    if (present > 0) {
+        if (!nev_cbor_r_u32(&r, &tmp32)) return NEV_ERR_INVALID_ARG;
+        out->session = (uint32_t)tmp32;
+    }
+    if (present > 1) {
+        if (!nev_cbor_r_f32(&r, &out->at_seconds)) return NEV_ERR_INVALID_ARG;
+    }
+    /* Fields appended by a newer peer: stepped over, not an error. */
+    for (size_t i = 2; i < present; i++) {
         if (!nev_cbor_r_skip(&r)) return NEV_ERR_INVALID_ARG;
     }
     return NEV_OK;

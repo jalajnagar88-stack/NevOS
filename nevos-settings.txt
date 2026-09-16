@@ -1,2 +1,2 @@
 # NEVOS settings. Generated; edits are read back on next start.
-boot_count=22
+boot_count=23

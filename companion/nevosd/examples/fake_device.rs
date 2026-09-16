@@ -83,7 +83,7 @@ async fn main() -> anyhow::Result<()> {
                 let last = seq == 49;
                 send(
                     &mut socket,
-                    AudioChunk { seq, session, r#final: last, pcm: pcm.clone() }.encode(),
+                    AudioChunk { seq, session, r#final: last, pcm: pcm.clone(), kind: 0 }.encode(),
                 )
                 .await?;
                 tokio::time::sleep(Duration::from_millis(20)).await;
@@ -99,7 +99,7 @@ async fn main() -> anyhow::Result<()> {
     loop {
         send(
             &mut socket,
-            AudioChunk { seq, session: 1, r#final: false, pcm: pcm.clone() }.encode(),
+            AudioChunk { seq, session: 1, r#final: false, pcm: pcm.clone(), kind: 0 }.encode(),
         )
         .await?;
         seq += 1;

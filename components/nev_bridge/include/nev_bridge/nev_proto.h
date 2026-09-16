@@ -28,6 +28,7 @@ typedef enum {
     NEV_MSG_PING = 5,
     NEV_MSG_PONG = 6,
     NEV_MSG_AUDIO_CHUNK = 16,
+    NEV_MSG_CAPTURE_MARKER = 19,
     NEV_MSG_TRANSCRIPT_PARTIAL = 17,
     NEV_MSG_TRANSCRIPT_FINAL = 18,
     NEV_MSG_AGENT_REQUEST = 32,
@@ -96,7 +97,30 @@ typedef struct {
     /* 16 kHz mono signed 16-bit little-endian. */
     const uint8_t *pcm; /* borrowed */
     size_t pcm_len;
+    /* 0 for a dictated note, 1 for a long-form capture (meeting mode).
+     * 
+     * The difference is what the daemon does with it, and the two are not the same
+     * job: a note is a few seconds, transcribed in one go and filed when it ends,
+     * while a capture runs for an hour, is transcribed in segments as it arrives, and
+     * must never be held in memory whole.
+     * 
+     * Appended after the fact, so an older device that does not send it gets 0 — which
+     * is the behaviour it had before the field existed. */
+    uint8_t kind;
 } nev_msg_audio_chunk_t;
+
+/* The user pressed the button during a long capture. The daemon records the
+ * position in the transcript so it can be found again.
+ * 
+ * Sent rather than inferred, because the point of a marker is that a person
+ * decided something mattered — and the device is the only thing that knows when
+ * they pressed it, to the second, while the daemon is still transcribing what was
+ * said a minute ago. */
+typedef struct {
+    uint32_t session;
+    /* Seconds from the start of the capture, as the device counted them. */
+    float at_seconds;
+} nev_msg_capture_marker_t;
 
 /* Best guess so far. Replaces any previous partial for this session. */
 typedef struct {
@@ -164,6 +188,7 @@ nev_err_t nev_proto_encode_pair_result(const nev_msg_pair_result_t *msg, uint8_t
 nev_err_t nev_proto_encode_ping(const nev_msg_ping_t *msg, uint8_t *buf, size_t cap, size_t *out_len);
 nev_err_t nev_proto_encode_pong(const nev_msg_pong_t *msg, uint8_t *buf, size_t cap, size_t *out_len);
 nev_err_t nev_proto_encode_audio_chunk(const nev_msg_audio_chunk_t *msg, uint8_t *buf, size_t cap, size_t *out_len);
+nev_err_t nev_proto_encode_capture_marker(const nev_msg_capture_marker_t *msg, uint8_t *buf, size_t cap, size_t *out_len);
 nev_err_t nev_proto_encode_transcript_partial(const nev_msg_transcript_partial_t *msg, uint8_t *buf, size_t cap, size_t *out_len);
 nev_err_t nev_proto_encode_transcript_final(const nev_msg_transcript_final_t *msg, uint8_t *buf, size_t cap, size_t *out_len);
 nev_err_t nev_proto_encode_agent_request(const nev_msg_agent_request_t *msg, uint8_t *buf, size_t cap, size_t *out_len);
@@ -182,6 +207,7 @@ nev_err_t nev_proto_decode_pair_result(const uint8_t *buf, size_t len, nev_msg_p
 nev_err_t nev_proto_decode_ping(const uint8_t *buf, size_t len, nev_msg_ping_t *out);
 nev_err_t nev_proto_decode_pong(const uint8_t *buf, size_t len, nev_msg_pong_t *out);
 nev_err_t nev_proto_decode_audio_chunk(const uint8_t *buf, size_t len, nev_msg_audio_chunk_t *out);
+nev_err_t nev_proto_decode_capture_marker(const uint8_t *buf, size_t len, nev_msg_capture_marker_t *out);
 nev_err_t nev_proto_decode_transcript_partial(const uint8_t *buf, size_t len, nev_msg_transcript_partial_t *out);
 nev_err_t nev_proto_decode_transcript_final(const uint8_t *buf, size_t len, nev_msg_transcript_final_t *out);
 nev_err_t nev_proto_decode_agent_request(const uint8_t *buf, size_t len, nev_msg_agent_request_t *out);

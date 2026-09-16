@@ -47,21 +47,12 @@ void tearDown(void) {
     } while (0)
 
 static void test_golden_vectors_encode_byte_for_byte(void) {
-    GOLDEN_ROUND_TRIP(hello);
-    GOLDEN_ROUND_TRIP(hello_ack);
-    GOLDEN_ROUND_TRIP(pair);
-    GOLDEN_ROUND_TRIP(pair_result);
-    GOLDEN_ROUND_TRIP(ping);
-    GOLDEN_ROUND_TRIP(pong);
-    GOLDEN_ROUND_TRIP(audio_chunk);
-    GOLDEN_ROUND_TRIP(transcript_partial);
-    GOLDEN_ROUND_TRIP(transcript_final);
-    GOLDEN_ROUND_TRIP(agent_request);
-    GOLDEN_ROUND_TRIP(agent_token);
-    GOLDEN_ROUND_TRIP(agent_done);
-    GOLDEN_ROUND_TRIP(mood_hint);
-    GOLDEN_ROUND_TRIP(notification);
-    GOLDEN_ROUND_TRIP(ota_available);
+    /* Driven by the generated list rather than a list kept here: a message
+     * added to the schema is checked from the moment it exists, which is not
+     * true of any list a person has to remember to extend. */
+#define X(name) GOLDEN_ROUND_TRIP(name);
+    NEV_GOLDEN_FOR_EACH(X)
+#undef X
 }
 
 /* Field values, not just lengths: a shifted field would still round-trip. */

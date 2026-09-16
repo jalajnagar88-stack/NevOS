@@ -11,8 +11,9 @@
 use futures_util::{SinkExt, StreamExt};
 use nevos_agent::MockAgent;
 use nevos_proto::{
-    frame_split, frame_wrap, peek_id, AgentDone, AgentRequest, AgentToken, AudioChunk, Hello,
-    HelloAck, MoodHint, MsgId, Notification, Pair, PairResult, TranscriptFinal, PROTOCOL_VERSION,
+    frame_split, frame_wrap, peek_id, AgentDone, AgentRequest, AgentToken, AudioChunk,
+    CaptureMarker, Hello, HelloAck, MoodHint, MsgId, Notification, Pair, PairResult,
+    TranscriptFinal, TranscriptPartial, PROTOCOL_VERSION,
 };
 use nevos_store::Store;
 use nevos_stt::MockTranscriber;
@@ -249,12 +250,7 @@ async fn speech_becomes_a_transcript_and_a_saved_note() {
         }
         send(
             &mut socket,
-            AudioChunk {
-                seq: seq as u32,
-                session: 1,
-                r#final: seq == last,
-                pcm,
-            }
+            AudioChunk { seq: seq as u32, session: 1, r#final: seq == last, pcm, kind: 0 }
             .encode(),
         )
         .await;
@@ -446,4 +442,116 @@ async fn the_control_panel_is_served_on_loopback() {
     // The two things the panel exists for.
     assert!(page.contains("Microphone is off"));
     assert!(page.contains("Delete everything"));
+}
+
+#[tokio::test]
+async fn a_meeting_is_transcribed_while_it_runs_and_filed_when_it_ends() {
+    // The second audio path, end to end: a capture that would be far too long
+    // to hold in memory, transcribed in segments, with the user marking a
+    // moment partway through.
+    let h = start("meeting").await;
+    let mut socket = h.connect().await;
+    pair(&h, &mut socket).await;
+
+    let block = vec![7i16; 2048];
+    let mut pcm = Vec::with_capacity(block.len() * 2);
+    for s in &block {
+        pcm.extend_from_slice(&s.to_le_bytes());
+    }
+
+    // Thirty seconds of audio is one segment; 16 kHz / 2048 samples is ~7.8
+    // chunks a second, so this is a little over a segment's worth.
+    let chunks_per_segment = (16_000 * 30) / 2048 + 1;
+    for seq in 0..chunks_per_segment {
+        send(
+            &mut socket,
+            AudioChunk { seq: seq as u32, session: 5, r#final: false, pcm: pcm.clone(), kind: 1 }
+                .encode(),
+        )
+        .await;
+        if seq == 10 {
+            send(&mut socket, CaptureMarker { session: 5, at_seconds: 1.5 }.encode()).await;
+        }
+    }
+
+    // A partial arrives before the meeting is over — that is the point of
+    // segmenting rather than waiting for the end.
+    let (id, payload) = recv(&mut socket).await;
+    assert_eq!(id, MsgId::TranscriptPartial, "nothing was transcribed until the end");
+    assert_eq!(TranscriptPartial::decode(&payload).unwrap().text, "put the kettle on");
+
+    send(
+        &mut socket,
+        AudioChunk {
+            seq: chunks_per_segment as u32,
+            session: 5,
+            r#final: true,
+            pcm,
+            kind: 1,
+        }
+        .encode(),
+    )
+    .await;
+
+    // The tail of the meeting is a segment too, so more partials may arrive
+    // before the final one. Drain until the end rather than assuming a count.
+    let final_text = loop {
+        let (id, payload) = recv(&mut socket).await;
+        match id {
+            MsgId::TranscriptPartial => continue,
+            MsgId::TranscriptFinal => break TranscriptFinal::decode(&payload).unwrap().text,
+            other => panic!("unexpected {}", other.name()),
+        }
+    };
+    assert!(!final_text.is_empty());
+
+    // Filed as a transcript, not as a note, and the marker survived.
+    let mut tries = 0;
+    let records = loop {
+        let r = h.state.store.records(nevos_store::RecordKind::Transcript).unwrap();
+        if !r.is_empty() || tries > 100 {
+            break r;
+        }
+        tries += 1;
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    assert_eq!(records.len(), 1, "the meeting was not filed");
+    assert_eq!(records[0].markers, vec![1.5], "the marker was lost");
+    assert!(
+        h.state.store.records(nevos_store::RecordKind::Note).unwrap().is_empty(),
+        "a meeting was filed as a note"
+    );
+}
+
+#[tokio::test]
+async fn a_meeting_interrupted_by_a_dead_device_is_still_filed() {
+    // The battery runs out mid-sentence. What was said before that is still
+    // worth keeping, and it is the only copy.
+    let h = start("meeting-cut").await;
+    let mut socket = h.connect().await;
+    pair(&h, &mut socket).await;
+
+    let mut pcm = Vec::new();
+    for _ in 0..2048 {
+        pcm.extend_from_slice(&7i16.to_le_bytes());
+    }
+    for seq in 0..5u32 {
+        send(
+            &mut socket,
+            AudioChunk { seq, session: 6, r#final: false, pcm: pcm.clone(), kind: 1 }.encode(),
+        )
+        .await;
+    }
+    drop(socket); // the device disappears without a final chunk
+
+    let mut tries = 0;
+    let records = loop {
+        let r = h.state.store.records(nevos_store::RecordKind::Transcript).unwrap();
+        if !r.is_empty() || tries > 100 {
+            break r;
+        }
+        tries += 1;
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    assert_eq!(records.len(), 1, "an interrupted meeting was thrown away");
 }

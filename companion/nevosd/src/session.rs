@@ -12,9 +12,9 @@
 //! The daemon owns the async parts: sockets, the model, the transcriber. They
 //! appear here only as `Action`s handed back to the caller.
 use nevos_proto::{
-    frame_wrap, peek_id, AgentDone, AgentRequest, AgentToken, AudioChunk, Hello, HelloAck, MoodHint,
-    MsgId, Notification, OtaAvailable, Pair, PairResult, Ping, Pong, TranscriptFinal,
-    TranscriptPartial, PROTOCOL_VERSION,
+    frame_wrap, peek_id, AgentDone, AgentRequest, AgentToken, AudioChunk, CaptureMarker, Hello,
+    HelloAck, MoodHint, MsgId, Notification, OtaAvailable, Pair, PairResult, Ping, Pong,
+    TranscriptFinal, TranscriptPartial, PROTOCOL_VERSION,
 };
 
 /// 16 kHz mono, as the device captures it.
@@ -71,6 +71,28 @@ impl Out {
     }
 }
 
+/// What a stream of audio is for. Mirrors `audio_chunk.kind` in the schema.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CaptureKind {
+    /// A few seconds, transcribed in one go and filed when it ends.
+    Note,
+    /// Meeting mode: minutes or hours, transcribed in segments as it arrives
+    /// and never held in memory whole.
+    Transcript,
+}
+
+impl CaptureKind {
+    fn from_wire(v: u8) -> Self {
+        // An unknown value is a newer device asking for something this daemon
+        // does not have. Treating it as a note keeps the audio rather than
+        // dropping it, which is the better of the two wrong answers.
+        match v {
+            1 => CaptureKind::Transcript,
+            _ => CaptureKind::Note,
+        }
+    }
+}
+
 /// Work for the daemon to do, or a message to send.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
@@ -82,6 +104,12 @@ pub enum Action {
     RequestPairing { device_id: String, code: String },
     /// A complete utterance, ready to transcribe.
     Utterance { session: u32, pcm: Vec<i16> },
+    /// Audio belonging to a long capture. Handed straight on rather than
+    /// accumulated: an hour at 16 kHz is 115 MB, and the device can keep
+    /// talking for as long as it likes.
+    CaptureChunk { session: u32, pcm: Vec<i16>, last: bool },
+    /// The user pressed the button during a capture, to mark this moment.
+    Marker { session: u32, at_seconds: f32 },
     /// Ask the model. Any turn already running should be abandoned.
     Ask { turn: u32, text: String, app: String },
     /// A gap in the audio sequence. Worth recording: it means the transcript
@@ -119,6 +147,7 @@ pub struct Session {
     daemon_name: String,
     /// Audio session currently being captured, and what has arrived of it.
     audio_session: Option<u32>,
+    kind: CaptureKind,
     audio: Vec<i16>,
     next_seq: u32,
 }
@@ -131,6 +160,7 @@ impl Session {
             firmware: String::new(),
             daemon_name: daemon_name.into(),
             audio_session: None,
+            kind: CaptureKind::Note,
             audio: Vec::new(),
             next_seq: 0,
         }
@@ -187,6 +217,7 @@ impl Session {
             },
             MsgId::Pong => vec![Action::Seen],
             MsgId::AudioChunk => self.on_audio(payload),
+            MsgId::CaptureMarker => self.on_marker(payload),
             MsgId::AgentRequest => self.on_agent_request(payload),
             // Everything else is ours to send, not the device's. A device
             // sending one is either broken or pretending to be the daemon.
@@ -321,6 +352,25 @@ impl Session {
         }))]
     }
 
+    fn on_marker(&mut self, payload: &[u8]) -> Vec<Action> {
+        if self.state != State::Ready {
+            return self.close("marker before pairing");
+        }
+        let Ok(marker) = CaptureMarker::decode(payload) else {
+            return self.close("malformed capture marker");
+        };
+        // A marker for a capture that is not running is meaningless, and
+        // accepting one would put a chapter mark at an arbitrary place in the
+        // last transcript.
+        if self.audio_session != Some(marker.session) {
+            return vec![Action::Seen];
+        }
+        vec![
+            Action::Seen,
+            Action::Marker { session: marker.session, at_seconds: marker.at_seconds },
+        ]
+    }
+
     fn on_audio(&mut self, payload: &[u8]) -> Vec<Action> {
         if self.state != State::Ready {
             return self.close("audio before pairing");
@@ -341,6 +391,7 @@ impl Session {
             self.audio_session = Some(chunk.session);
             self.audio.clear();
             self.next_seq = 0;
+            self.kind = CaptureKind::from_wire(chunk.kind);
         } else if chunk.seq != self.next_seq {
             actions.push(Action::AudioGap {
                 session: chunk.session,
@@ -351,6 +402,26 @@ impl Session {
         self.next_seq = chunk.seq.wrapping_add(1);
 
         let samples = chunk.pcm.chunks_exact(2).map(|p| i16::from_le_bytes([p[0], p[1]]));
+
+        /*
+         * A long capture is passed straight through.
+         *
+         * The note path buffers because a note is short and transcribing it in
+         * one piece gives the best result. A meeting is the opposite: an hour of
+         * 16 kHz audio is 115 MB, the user expects to see words appear while it
+         * is still running, and the device can keep talking for as long as it
+         * likes. So nothing accumulates here at all.
+         */
+        if self.kind == CaptureKind::Transcript {
+            let pcm: Vec<i16> = samples.collect();
+            let last = chunk.r#final;
+            if last {
+                self.audio_session = None;
+            }
+            actions.push(Action::CaptureChunk { session: chunk.session, pcm, last });
+            return actions;
+        }
+
         if self.audio.len() + chunk.pcm.len() / 2 > MAX_UTTERANCE_SAMPLES {
             // Cut it off here and transcribe what we have rather than growing
             // without bound. The user gets a truncated note; the daemon lives.
@@ -445,12 +516,20 @@ mod tests {
         (s, auth)
     }
 
+    fn capture(session: u32, seq: u32, samples: &[i16], last: bool) -> Vec<u8> {
+        let mut pcm = Vec::new();
+        for s in samples {
+            pcm.extend_from_slice(&s.to_le_bytes());
+        }
+        AudioChunk { seq, session, r#final: last, pcm, kind: 1 }.encode()
+    }
+
     fn audio(session: u32, seq: u32, samples: &[i16], last: bool) -> Vec<u8> {
         let mut pcm = Vec::new();
         for s in samples {
             pcm.extend_from_slice(&s.to_le_bytes());
         }
-        AudioChunk { seq, session, r#final: last, pcm }.encode()
+        AudioChunk { seq, session, r#final: last, pcm, kind: 0 }.encode()
     }
 
     #[test]
@@ -639,7 +718,7 @@ mod tests {
     #[test]
     fn an_odd_pcm_length_closes_the_connection() {
         let (mut s, auth) = ready_session();
-        let frame = AudioChunk { seq: 0, session: 1, r#final: true, pcm: vec![1, 2, 3] }.encode();
+        let frame = AudioChunk { seq: 0, session: 1, r#final: true, pcm: vec![1, 2, 3], kind: 0 }.encode();
         assert!(matches!(s.on_frame(&frame, NOW, &auth).as_slice(), [Action::Close(_)]));
     }
 
@@ -678,6 +757,70 @@ mod tests {
             actions.last(),
             Some(&Action::Ask { turn: 2, text: "second".into(), app: "notes".into() })
         );
+    }
+
+    #[test]
+    fn capture_audio_is_never_accumulated() {
+        /*
+         * The whole point of the second path. An hour of 16 kHz audio is 115 MB
+         * and the device can keep talking for as long as it likes, so a capture
+         * chunk must leave this struct on the same call it arrived.
+         */
+        let (mut s, auth) = ready_session();
+        let block = vec![3i16; 2048];
+        for seq in 0..10u32 {
+            let actions = s.on_frame(&capture(9, seq, &block, false), NOW, &auth);
+            assert!(
+                actions.iter().any(|a| matches!(a, Action::CaptureChunk { .. })),
+                "a capture chunk was swallowed"
+            );
+        }
+        assert!(s.is_capturing(), "the tray indicator must be lit during a meeting");
+    }
+
+    #[test]
+    fn a_note_and_a_meeting_take_different_paths() {
+        let (mut s, auth) = ready_session();
+
+        let actions = s.on_frame(&audio(1, 0, &[1, 2], true), NOW, &auth);
+        assert!(matches!(actions.last(), Some(Action::Utterance { .. })), "{actions:?}");
+
+        let actions = s.on_frame(&capture(2, 0, &[3, 4], true), NOW, &auth);
+        assert_eq!(
+            actions.last(),
+            Some(&Action::CaptureChunk { session: 2, pcm: vec![3, 4], last: true })
+        );
+        assert!(!s.is_capturing(), "the final chunk ends the capture");
+    }
+
+    #[test]
+    fn an_unknown_capture_kind_is_treated_as_a_note() {
+        // A newer device asking for something this daemon does not have. Keeping
+        // the audio is the better of the two wrong answers.
+        let (mut s, auth) = ready_session();
+        let frame =
+            AudioChunk { seq: 0, session: 1, r#final: true, pcm: vec![1, 0], kind: 99 }.encode();
+        let actions = s.on_frame(&frame, NOW, &auth);
+        assert!(matches!(actions.last(), Some(Action::Utterance { .. })), "{actions:?}");
+    }
+
+    #[test]
+    fn a_marker_during_a_capture_is_reported() {
+        let (mut s, auth) = ready_session();
+        s.on_frame(&capture(7, 0, &[1, 2], false), NOW, &auth);
+
+        let frame = CaptureMarker { session: 7, at_seconds: 12.5 }.encode();
+        let actions = s.on_frame(&frame, NOW, &auth);
+        assert_eq!(actions.last(), Some(&Action::Marker { session: 7, at_seconds: 12.5 }));
+    }
+
+    #[test]
+    fn a_marker_for_a_capture_that_is_not_running_is_ignored() {
+        // Otherwise it lands at an arbitrary point in whatever was recorded last.
+        let (mut s, auth) = ready_session();
+        let frame = CaptureMarker { session: 7, at_seconds: 1.0 }.encode();
+        let actions = s.on_frame(&frame, NOW, &auth);
+        assert_eq!(actions, vec![Action::Seen]);
     }
 
     #[test]

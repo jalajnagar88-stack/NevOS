@@ -75,7 +75,7 @@ pub fn sample_pong() -> Pong {
 }
 
 pub const GOLDEN_AUDIO_CHUNK: &[u8] = &[
-    0x85, 0x10, 0x07, 0x0E, 0xF5, 0x48, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A
+    0x86, 0x10, 0x07, 0x0E, 0xF5, 0x48, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x18, 0x23
 ];
 
 pub fn sample_audio_chunk() -> AudioChunk {
@@ -84,6 +84,18 @@ pub fn sample_audio_chunk() -> AudioChunk {
         session: 14,
         r#final: true,
         pcm: vec![0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A],
+        kind: 35,
+    }
+}
+
+pub const GOLDEN_CAPTURE_MARKER: &[u8] = &[
+    0x83, 0x13, 0x07, 0xFA, 0x3F, 0xC0, 0x00, 0x00
+];
+
+pub fn sample_capture_marker() -> CaptureMarker {
+    CaptureMarker {
+        session: 7,
+        at_seconds: 1.5f32,
     }
 }
 
@@ -178,5 +190,94 @@ pub fn sample_ota_available() -> OtaAvailable {
         url: "url-1".to_string(),
         size_bytes: 21,
         sha256: vec![0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A],
+    }
+}
+
+#[cfg(test)]
+mod golden_tests {
+    use super::*;
+
+    #[test]
+    fn every_message_matches_the_reference_bytes() {
+        let want = sample_hello();
+        assert_eq!(want.encode(), GOLDEN_HELLO, "hello: encoded bytes differ from the reference");
+        let got = Hello::decode(GOLDEN_HELLO).expect("hello: failed to decode the reference bytes");
+        assert_eq!(got, want, "hello: decoded fields differ from the reference");
+
+        let want = sample_hello_ack();
+        assert_eq!(want.encode(), GOLDEN_HELLO_ACK, "hello_ack: encoded bytes differ from the reference");
+        let got = HelloAck::decode(GOLDEN_HELLO_ACK).expect("hello_ack: failed to decode the reference bytes");
+        assert_eq!(got, want, "hello_ack: decoded fields differ from the reference");
+
+        let want = sample_pair();
+        assert_eq!(want.encode(), GOLDEN_PAIR, "pair: encoded bytes differ from the reference");
+        let got = Pair::decode(GOLDEN_PAIR).expect("pair: failed to decode the reference bytes");
+        assert_eq!(got, want, "pair: decoded fields differ from the reference");
+
+        let want = sample_pair_result();
+        assert_eq!(want.encode(), GOLDEN_PAIR_RESULT, "pair_result: encoded bytes differ from the reference");
+        let got = PairResult::decode(GOLDEN_PAIR_RESULT).expect("pair_result: failed to decode the reference bytes");
+        assert_eq!(got, want, "pair_result: decoded fields differ from the reference");
+
+        let want = sample_ping();
+        assert_eq!(want.encode(), GOLDEN_PING, "ping: encoded bytes differ from the reference");
+        let got = Ping::decode(GOLDEN_PING).expect("ping: failed to decode the reference bytes");
+        assert_eq!(got, want, "ping: decoded fields differ from the reference");
+
+        let want = sample_pong();
+        assert_eq!(want.encode(), GOLDEN_PONG, "pong: encoded bytes differ from the reference");
+        let got = Pong::decode(GOLDEN_PONG).expect("pong: failed to decode the reference bytes");
+        assert_eq!(got, want, "pong: decoded fields differ from the reference");
+
+        let want = sample_audio_chunk();
+        assert_eq!(want.encode(), GOLDEN_AUDIO_CHUNK, "audio_chunk: encoded bytes differ from the reference");
+        let got = AudioChunk::decode(GOLDEN_AUDIO_CHUNK).expect("audio_chunk: failed to decode the reference bytes");
+        assert_eq!(got, want, "audio_chunk: decoded fields differ from the reference");
+
+        let want = sample_capture_marker();
+        assert_eq!(want.encode(), GOLDEN_CAPTURE_MARKER, "capture_marker: encoded bytes differ from the reference");
+        let got = CaptureMarker::decode(GOLDEN_CAPTURE_MARKER).expect("capture_marker: failed to decode the reference bytes");
+        assert_eq!(got, want, "capture_marker: decoded fields differ from the reference");
+
+        let want = sample_transcript_partial();
+        assert_eq!(want.encode(), GOLDEN_TRANSCRIPT_PARTIAL, "transcript_partial: encoded bytes differ from the reference");
+        let got = TranscriptPartial::decode(GOLDEN_TRANSCRIPT_PARTIAL).expect("transcript_partial: failed to decode the reference bytes");
+        assert_eq!(got, want, "transcript_partial: decoded fields differ from the reference");
+
+        let want = sample_transcript_final();
+        assert_eq!(want.encode(), GOLDEN_TRANSCRIPT_FINAL, "transcript_final: encoded bytes differ from the reference");
+        let got = TranscriptFinal::decode(GOLDEN_TRANSCRIPT_FINAL).expect("transcript_final: failed to decode the reference bytes");
+        assert_eq!(got, want, "transcript_final: decoded fields differ from the reference");
+
+        let want = sample_agent_request();
+        assert_eq!(want.encode(), GOLDEN_AGENT_REQUEST, "agent_request: encoded bytes differ from the reference");
+        let got = AgentRequest::decode(GOLDEN_AGENT_REQUEST).expect("agent_request: failed to decode the reference bytes");
+        assert_eq!(got, want, "agent_request: decoded fields differ from the reference");
+
+        let want = sample_agent_token();
+        assert_eq!(want.encode(), GOLDEN_AGENT_TOKEN, "agent_token: encoded bytes differ from the reference");
+        let got = AgentToken::decode(GOLDEN_AGENT_TOKEN).expect("agent_token: failed to decode the reference bytes");
+        assert_eq!(got, want, "agent_token: decoded fields differ from the reference");
+
+        let want = sample_agent_done();
+        assert_eq!(want.encode(), GOLDEN_AGENT_DONE, "agent_done: encoded bytes differ from the reference");
+        let got = AgentDone::decode(GOLDEN_AGENT_DONE).expect("agent_done: failed to decode the reference bytes");
+        assert_eq!(got, want, "agent_done: decoded fields differ from the reference");
+
+        let want = sample_mood_hint();
+        assert_eq!(want.encode(), GOLDEN_MOOD_HINT, "mood_hint: encoded bytes differ from the reference");
+        let got = MoodHint::decode(GOLDEN_MOOD_HINT).expect("mood_hint: failed to decode the reference bytes");
+        assert_eq!(got, want, "mood_hint: decoded fields differ from the reference");
+
+        let want = sample_notification();
+        assert_eq!(want.encode(), GOLDEN_NOTIFICATION, "notification: encoded bytes differ from the reference");
+        let got = Notification::decode(GOLDEN_NOTIFICATION).expect("notification: failed to decode the reference bytes");
+        assert_eq!(got, want, "notification: decoded fields differ from the reference");
+
+        let want = sample_ota_available();
+        assert_eq!(want.encode(), GOLDEN_OTA_AVAILABLE, "ota_available: encoded bytes differ from the reference");
+        let got = OtaAvailable::decode(GOLDEN_OTA_AVAILABLE).expect("ota_available: failed to decode the reference bytes");
+        assert_eq!(got, want, "ota_available: decoded fields differ from the reference");
+
     }
 }
