@@ -1,5 +1,6 @@
 #include "nev_services/input_service.h"
 #include "nev_board/board.h"
+#include "nev_services/power_service.h"
 #include "nev_kernel/nev_bus.h"
 #include "nev_port/nev_log.h"
 #include "lvgl.h"
@@ -10,6 +11,7 @@ static lv_indev_t *s_pointer;
 static nev_touch_t s_last_touch;
 static bool s_touch_down;
 static uint8_t s_buttons;  /* debounced state as last published */
+static bool s_swallowing;  /* the current touch was consumed to wake the screen */
 static uint8_t s_raw_last; /* last raw read, for debouncing     */
 static uint32_t s_raw_since_ms;
 static bool s_ready;
@@ -21,6 +23,21 @@ static bool s_ready;
  */
 static void pointer_read_cb(lv_indev_t *indev, lv_indev_data_t *data) {
     (void)indev;
+
+    /*
+     * A touch that woke the screen is hidden from LVGL too, not just from the
+     * bus.
+     *
+     * Gating only the published event looked right and was not: LVGL reads the
+     * board here directly, so the tap that woke a dark device still pressed
+     * whatever was underneath it, and the first thing the simulator did on
+     * waking was launch Snake.
+     */
+    if (s_swallowing) {
+        data->state = LV_INDEV_STATE_RELEASED;
+        return;
+    }
+
     nev_touch_t t;
     if (nev_board_touch_read(&t) && t.action != NEV_TOUCH_UP) {
         data->point.x = t.x;
@@ -95,19 +112,43 @@ static void publish_touch(const nev_touch_t *t) {
     (void)nev_bus_publish(&ev);
 }
 
-static void poll_touch(void) {
+/*
+ * Every input passes the power service first.
+ *
+ * It is a call rather than a subscription because an event cannot be
+ * un-published: the touch that wakes a dark screen has to be stopped here, or
+ * it launches whatever happened to be underneath a finger reaching for an
+ * object it cannot see.
+ *
+ * A sideways call between two L2 services, which the layering permits below L3.
+ */
+static bool wake_only(uint32_t now_ms) {
+    return !power_service_gate_input(now_ms);
+}
+
+static void poll_touch(uint32_t now_ms) {
     nev_touch_t t;
     const bool down = nev_board_touch_read(&t) && t.action != NEV_TOUCH_UP;
 
     if (down && !s_touch_down) {
         t.action = NEV_TOUCH_DOWN;
-        publish_touch(&t);
-        s_last_touch = t;
+        /* The finger still went down, so the UP that follows must be tracked
+         * either way — otherwise the next real touch looks like a stuck one. */
         s_touch_down = true;
+        s_last_touch = t;
+        if (wake_only(now_ms)) {
+            s_swallowing = true;
+            return;
+        }
+        publish_touch(&t);
     } else if (!down && s_touch_down) {
+        s_touch_down = false;
+        if (s_swallowing) {
+            s_swallowing = false;
+            return;
+        }
         s_last_touch.action = NEV_TOUCH_UP;
         publish_touch(&s_last_touch);
-        s_touch_down = false;
     } else if (down) {
         s_last_touch = t; /* remember where the finger was, for the UP */
     }
@@ -116,7 +157,7 @@ static void poll_touch(void) {
 void input_service_poll(uint32_t now_ms) {
     if (!s_ready) return;
 
-    poll_touch();
+    poll_touch(now_ms);
 
     const uint8_t raw = nev_board_buttons_read();
 
@@ -137,7 +178,12 @@ void input_service_poll(uint32_t now_ms) {
     for (uint8_t bit = 0; bit < 2; bit++) {
         const uint8_t mask = (uint8_t)(1u << bit);
         if (!(changed & mask)) continue;
-        publish_button((raw & mask) ? NEV_EVT_INPUT_BUTTON_DOWN : NEV_EVT_INPUT_BUTTON_UP, bit);
+        const bool pressed = (raw & mask) != 0;
+        /* A press that wakes the device is swallowed the same way a touch is;
+         * a release is always delivered, so nothing is left thinking a button
+         * is still held. */
+        if (pressed && wake_only(now_ms)) continue;
+        publish_button(pressed ? NEV_EVT_INPUT_BUTTON_DOWN : NEV_EVT_INPUT_BUTTON_UP, bit);
     }
     s_buttons = raw;
 }

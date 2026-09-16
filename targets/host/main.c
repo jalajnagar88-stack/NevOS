@@ -28,6 +28,7 @@
 #include "nev_port/nev_time.h"
 #include "nev_services/display_service.h"
 #include "nev_services/input_service.h"
+#include "nev_services/power_service.h"
 #include "lvgl.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -236,6 +237,8 @@ typedef struct {
     const char *settings_path;
     bool play;
     bool bridge;
+    /* -1 means "leave it on mains", which is what a simulator really is. */
+    int32_t battery;
     /* One scripted tap, so a screenshot can show what a button does rather
      * than only what a screen looks like before anyone touches it. */
     int32_t tap_x, tap_y;
@@ -246,14 +249,15 @@ static void usage(const char *argv0) {
     fprintf(stderr,
             "usage: %s [--persona] [--boot] [--script] [--mood NAME]\n"
             "          [--app ID] [--settings PATH] [--play]\n"
-            "          [--bridge] [--tap X,Y,FRAME] [--frames N] [--shot PATH.ppm]\n"
+            "          [--bridge] [--battery PCT] [--tap X,Y,FRAME]\n"
+            "          [--frames N] [--shot PATH.ppm]\n"
             "          [--strip DIR] [--strip-every N]\n",
             argv0);
     exit(2);
 }
 
 static options_t parse_args(int argc, char **argv) {
-    options_t o = {.strip_every = 6};
+    options_t o = {.strip_every = 6, .battery = -1};
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
         if (!strcmp(a, "--frames") && i + 1 < argc)
@@ -274,6 +278,8 @@ static options_t parse_args(int argc, char **argv) {
             o.play = true;
         else if (!strcmp(a, "--bridge"))
             o.bridge = true;
+        else if (!strcmp(a, "--battery") && i + 1 < argc)
+            o.battery = (int32_t)strtol(argv[++i], NULL, 10);
         else if (!strcmp(a, "--tap") && i + 1 < argc) {
             unsigned x = 0, y = 0, f = 0;
             if (sscanf(argv[++i], "%u,%u,%u", &x, &y, &f) != 3) usage(argv[0]);
@@ -306,6 +312,11 @@ int main(int argc, char **argv) {
     if (nev_board_init() != NEV_OK) return 1;
     if (display_service_init() != NEV_OK) return 1;
     if (input_service_init() != NEV_OK) return 1;
+    if (opt.battery >= 0) {
+        nev_board_sim_set_battery((uint8_t)opt.battery, false);
+        NEV_LOGI(TAG, "pretending to run on a %d%% battery", (int)opt.battery);
+    }
+    if (power_service_init(nev_now_ms()) != NEV_OK) return 1;
 
     /*
      * The simulator knows what time it is; the device does not until the daemon
@@ -381,6 +392,7 @@ int main(int argc, char **argv) {
             if (!opt.play) frame_no++;
         }
         input_service_poll(now_ms);
+        power_service_tick(now_ms);
         /* On the device this runs on the network task, not here. In the
          * simulator there is one thread, and the bridge never blocks, so the
          * frame budget survives it. */
@@ -432,6 +444,7 @@ int main(int argc, char **argv) {
         rc = 1;
     }
 
+    power_service_deinit();
     if (opt.bridge) nev_bridge_stop();
     if (opt.persona) nev_persona_deinit();
     if (shell_mode) nev_shell_deinit();

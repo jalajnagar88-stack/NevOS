@@ -25,6 +25,15 @@ nev_sim_display_kind_t nev_board_sim_display_kind(void);
 nev_err_t nev_board_sim_save_ppm(const char *path);
 
 /* Injected state is returned by the matching nev_board_* read on the next poll. */
+/*
+ * Pretend the battery is somewhere other than full and plugged in.
+ *
+ * The power policy's interesting cases — the screen going fully dark, the
+ * shortened timeout near empty, a charger pulled out while it sleeps — cannot
+ * occur on a simulator that is permanently on mains.
+ */
+void nev_board_sim_set_battery(uint8_t percent, bool charging);
+
 void nev_board_sim_inject_touch(int16_t x, int16_t y, nev_touch_action_t action);
 void nev_board_sim_inject_buttons(uint8_t mask);
 void nev_board_sim_inject_imu(const nev_imu_sample_t *sample);

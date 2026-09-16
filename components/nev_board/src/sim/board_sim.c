@@ -123,13 +123,30 @@ bool nev_board_imu_read(nev_imu_sample_t *out) {
     return true;
 }
 
+/*
+ * Mains and a full pack by default, which is what a simulator on a laptop
+ * actually is. `nev_board_sim_set_battery` overrides it, because the cases
+ * worth looking at — dimming all the way to dark, the low-battery timeout, the
+ * moment a charger is pulled out — cannot happen on a device that is always
+ * plugged in, and a fake discharge curve would put them on a timer nobody wants
+ * to wait for.
+ */
+static uint8_t s_batt_percent = 100;
+static bool s_batt_charging = true;
+
+void nev_board_sim_set_battery(uint8_t percent, bool charging) {
+    s_batt_percent = percent > 100 ? 100 : percent;
+    s_batt_charging = charging;
+}
+
 void nev_board_power_state(nev_power_state_t *out) {
     if (!out) return;
-    /* The simulator is always on mains with a full pack; power_service gets its
-     * interesting cases from injection, not from a fake discharge curve. */
-    out->millivolts = NEV_BATT_FULL_MV;
-    out->percent = 100;
-    out->charging = true;
+    out->percent = s_batt_percent;
+    /* A crude but monotonic map from percent to a plausible cell voltage, so
+     * anything reading millivolts sees a number that moves the right way. */
+    out->millivolts = (uint16_t)(NEV_BATT_EMPTY_MV +
+                                 (NEV_BATT_FULL_MV - NEV_BATT_EMPTY_MV) * s_batt_percent / 100);
+    out->charging = s_batt_charging;
     out->battery_present = true;
 }
 

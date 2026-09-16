@@ -7,6 +7,7 @@ option(NEVOS_WERROR "Treat warnings as errors" ON)
 
 get_filename_component(NEVOS_ROOT ${CMAKE_CURRENT_LIST_DIR}/../.. ABSOLUTE)
 include(${NEVOS_ROOT}/cmake/nevos_host.cmake)
+include(${NEVOS_ROOT}/components/nev_services/sources.cmake)
 include(${NEVOS_ROOT}/components/nev_appkit/sources.cmake)
 include(${NEVOS_ROOT}/apps/sources.cmake)
 
@@ -35,8 +36,12 @@ target_compile_definitions(unity PUBLIC UNITY_INCLUDE_DOUBLE UNITY_OUTPUT_COLOR)
 
 enable_testing()
 
+add_library(nevos_service_cores STATIC ${NEV_SERVICES_CORE_SRCS})
+target_include_directories(nevos_service_cores PUBLIC ${NEV_SERVICES_INCLUDE_DIRS})
+target_link_libraries(nevos_service_cores PUBLIC nevos_core)
+
 foreach(src ${NEV_KERNEL_TEST_SRCS} ${NEV_PERSONA_TEST_SRCS} ${NEV_APPKIT_TEST_SRCS}
-        ${NEV_BRIDGE_TEST_SRCS}
+        ${NEV_BRIDGE_TEST_SRCS} ${NEV_SERVICES_TEST_SRCS}
         ${NEV_GAME_RULE_TEST_SRCS})
   get_filename_component(name ${src} NAME_WE)
   add_executable(${name} ${src})
@@ -47,6 +52,9 @@ foreach(src ${NEV_KERNEL_TEST_SRCS} ${NEV_PERSONA_TEST_SRCS} ${NEV_APPKIT_TEST_S
   if(src IN_LIST NEV_BRIDGE_TEST_SRCS)
     # golden_data.h lives beside the test, not on a public include path.
     target_include_directories(${name} PRIVATE ${NEV_BRIDGE_DIR}/test)
+  endif()
+  if(src IN_LIST NEV_SERVICES_TEST_SRCS)
+    target_link_libraries(${name} PRIVATE nevos_service_cores)
   endif()
   if(src IN_LIST NEV_GAME_RULE_TEST_SRCS)
     target_link_libraries(${name} PRIVATE nevos_game_rules)
