@@ -12,6 +12,7 @@
 #include "nev_port/nev_log.h"
 #include "nev_port/nev_mem.h"
 #include "nev_port/nev_sync.h"
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -152,6 +153,34 @@ void nev_board_power_state(nev_power_state_t *out) {
     out->battery_present = true;
 }
 
+/* ------------------------------------------------------------------- Wi-Fi */
+
+/*
+ * The simulator is already on a network — it is a program on a laptop — so
+ * "connecting" is bookkeeping. It still goes through ASSOCIATED for one call,
+ * because a state machine that only ever sees the happy path in testing is a
+ * state machine whose unhappy paths are untested.
+ */
+static nev_wifi_status_t s_wifi = NEV_WIFI_DOWN;
+static int s_wifi_polls;
+
+nev_err_t nev_board_wifi_connect(const char *ssid, const char *password) {
+    (void)password;
+    NEV_LOGI("board", "wifi: pretending to join '%s'", ssid ? ssid : "");
+    s_wifi = NEV_WIFI_ASSOCIATED;
+    s_wifi_polls = 0;
+    return NEV_OK;
+}
+
+void nev_board_wifi_disconnect(void) {
+    s_wifi = NEV_WIFI_DOWN;
+}
+
+nev_wifi_status_t nev_board_wifi_status(void) {
+    if (s_wifi == NEV_WIFI_ASSOCIATED && ++s_wifi_polls > 1) s_wifi = NEV_WIFI_ONLINE;
+    return s_wifi;
+}
+
 /* ------------------------------------------------------------------ audio */
 
 /*
@@ -198,6 +227,77 @@ size_t nev_board_audio_read(int16_t *out, size_t max_samples) {
     memset(out, 0, n * sizeof(int16_t));
     s_audio_delivered += n;
     return n;
+}
+
+/*
+ * Playback on the simulator writes a WAV instead of making a noise.
+ *
+ * A build machine has no speaker and CI has no ears, so the useful thing to do
+ * with generated audio is make it inspectable: NEVOS_SIM_AUDIO_OUT names a file
+ * and every sample the system plays lands in it, in order. That turns "does the
+ * timer make a sound when it finishes" into a file you can listen to once and a
+ * length you can assert on.
+ */
+static FILE *s_wav;
+static uint32_t s_wav_samples;
+
+static void wav_write_header(FILE *f, uint32_t samples) {
+    const uint32_t data_len = samples * 2u;
+    const uint32_t rate = NEV_AUDIO_SAMPLE_RATE;
+    uint8_t h[44] = {0};
+    memcpy(h, "RIFF", 4);
+    const uint32_t riff = 36u + data_len;
+    memcpy(h + 4, &riff, 4);
+    memcpy(h + 8, "WAVEfmt ", 8);
+    const uint32_t fmt_len = 16, byte_rate = rate * 2u;
+    const uint16_t pcm = 1, channels = 1, align = 2, bits = 16;
+    memcpy(h + 16, &fmt_len, 4);
+    memcpy(h + 20, &pcm, 2);
+    memcpy(h + 22, &channels, 2);
+    memcpy(h + 24, &rate, 4);
+    memcpy(h + 28, &byte_rate, 4);
+    memcpy(h + 32, &align, 2);
+    memcpy(h + 34, &bits, 2);
+    memcpy(h + 36, "data", 4);
+    memcpy(h + 40, &data_len, 4);
+    fseek(f, 0, SEEK_SET);
+    fwrite(h, 1, sizeof(h), f);
+}
+
+nev_err_t nev_board_audio_out_start(void) {
+    if (s_wav) return NEV_OK;
+    const char *path = getenv("NEVOS_SIM_AUDIO_OUT");
+    if (!path) return NEV_OK; /* silence, and nothing to write */
+
+    s_wav = fopen(path, "wb");
+    if (!s_wav) {
+        NEV_LOGW("board", "could not open %s for audio", path);
+        return NEV_OK; /* not fatal: sound is never load-bearing */
+    }
+    s_wav_samples = 0;
+    wav_write_header(s_wav, 0);
+    NEV_LOGI("board", "audio out -> %s", path);
+    return NEV_OK;
+}
+
+void nev_board_audio_out_stop(void) {
+    if (!s_wav) return;
+    /* The header carries the length, which is only known now. */
+    wav_write_header(s_wav, s_wav_samples);
+    fclose(s_wav);
+    s_wav = NULL;
+}
+
+size_t nev_board_audio_out_write(const int16_t *samples, size_t count) {
+    if (!samples || count == 0) return 0;
+    if (s_wav) {
+        fwrite(samples, sizeof(int16_t), count, s_wav);
+        s_wav_samples += (uint32_t)count;
+    }
+    /* Accepts everything: there is no real driver queue to fill, and a
+     * simulator that applied backpressure would be inventing a constraint the
+     * hardware has not yet told us about. */
+    return count;
 }
 
 void nev_board_tick(void) {

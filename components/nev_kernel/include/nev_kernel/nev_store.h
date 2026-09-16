@@ -65,6 +65,7 @@ extern "C" {
     X(HS_MATCH, U32, "hs_match", "0", 0, 999999)                                                   \
     X(HS_REFLEX, U32, "hs_reflex", "0", 0, 999999)                                                 \
     /* shell */                                                                                    \
+    X(FOCUS_MINUTES, U16, "focus_minutes", "15", 1, 120)                                           \
     X(LAST_APP, STR, "last_app", "", 0, 16)                                                        \
     X(BOOT_COUNT, U32, "boot_count", "0", 0, 4000000)
 

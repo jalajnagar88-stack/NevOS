@@ -30,6 +30,9 @@
 #include "nev_services/input_service.h"
 #include "nev_services/audio_service.h"
 #include "nev_services/power_service.h"
+#include "nev_services/net_service.h"
+#include "nev_services/sound_service.h"
+#include "nev_services/sys_service.h"
 #include "lvgl.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -328,6 +331,9 @@ int main(int argc, char **argv) {
     }
     if (power_service_init(nev_now_ms()) != NEV_OK) return 1;
     if (audio_service_init() != NEV_OK) return 1;
+    if (sound_service_init() != NEV_OK) return 1;
+    if (sys_service_init(nev_now_ms()) != NEV_OK) return 1;
+    if (net_service_init(nev_now_ms()) != NEV_OK) return 1;
 
     /*
      * The simulator knows what time it is; the device does not until the daemon
@@ -407,11 +413,13 @@ int main(int argc, char **argv) {
         input_service_poll(now_ms);
         power_service_tick(now_ms);
         audio_service_poll(now_ms);
+        sound_service_tick(now_ms);
+        net_service_tick(now_ms);
+        sys_service_tick(now_ms);
         /* On the device this runs on the network task, not here. In the
          * simulator there is one thread, and the bridge never blocks, so the
          * frame budget survives it. */
         if (opt.bridge) nev_bridge_poll();
-        nev_store_tick(now_ms);
         if (opt.persona) nev_persona_tick(now_ms);
         if (shell_mode) nev_shell_tick(now_ms);
 
@@ -462,6 +470,9 @@ int main(int argc, char **argv) {
         rc = 1;
     }
 
+    net_service_deinit();
+    sys_service_deinit();
+    sound_service_deinit();
     audio_service_deinit();
     power_service_deinit();
     if (opt.bridge) nev_bridge_stop();

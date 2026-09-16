@@ -63,6 +63,25 @@ uint8_t nev_board_buttons_read(void);        /* NEV_BTN_* bitmask, debounced  */
 bool nev_board_imu_read(nev_imu_sample_t *out);
 void nev_board_power_state(nev_power_state_t *out);
 
+/* ------------------------------------------------------------------- Wi-Fi */
+
+/*
+ * Polled rather than callback-driven, because the alternative is a driver
+ * calling into the system from its own task at a moment of its choosing, and
+ * every such call becomes a locking question. The radio is slow enough that
+ * asking once a frame costs nothing.
+ */
+typedef enum {
+    NEV_WIFI_DOWN = 0,   /* not associated                       */
+    NEV_WIFI_ASSOCIATED, /* associated, no address yet           */
+    NEV_WIFI_ONLINE,     /* has an address                       */
+    NEV_WIFI_REFUSED,    /* the access point said no             */
+} nev_wifi_status_t;
+
+nev_err_t nev_board_wifi_connect(const char *ssid, const char *password);
+void nev_board_wifi_disconnect(void);
+nev_wifi_status_t nev_board_wifi_status(void);
+
 /* ------------------------------------------------------------------ audio */
 
 /*
@@ -80,6 +99,16 @@ bool nev_board_audio_is_running(void);
 
 /* Returns the number of samples written, 0 when none are ready yet. */
 size_t nev_board_audio_read(int16_t *out, size_t max_samples);
+
+/*
+ * Playback, same format. Also non-blocking: it takes what the driver has room
+ * for and returns how much that was. A caller with more must keep the rest and
+ * come back, which is what makes a sound cue survive a busy frame without
+ * either stalling the render task or arriving as a gap in the middle of a note.
+ */
+nev_err_t nev_board_audio_out_start(void);
+void nev_board_audio_out_stop(void);
+size_t nev_board_audio_out_write(const int16_t *samples, size_t count);
 
 /*
  * Called once per frame from the render task. On the simulator this pumps the
