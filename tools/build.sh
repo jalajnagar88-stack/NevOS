@@ -86,6 +86,13 @@ case "${1:-check}" in
     (cd companion && cargo test "${@:2}")
     ;;
 
+  bridge-live)
+    # The bridge against a real daemon. Start one first:
+    #   (cd companion && cargo run -p nevosd -- --mock)
+    "$0" test >/dev/null
+    ./build/tests/bridge_live
+    ;;
+
   lint)
     python3 tools/ci/lint_layers.py
     # A checked-in codec that no longer matches the schema is the exact drift

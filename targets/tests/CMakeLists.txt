@@ -55,3 +55,11 @@ foreach(src ${NEV_KERNEL_TEST_SRCS} ${NEV_PERSONA_TEST_SRCS} ${NEV_APPKIT_TEST_S
   add_test(NAME ${name} COMMAND ${name})
   set_tests_properties(${name} PROPERTIES TIMEOUT 30)
 endforeach()
+
+# The live probe is not a unit test: it needs nevosd running on this machine, so
+# it is built but never registered with ctest. `./tools/build.sh bridge-live`
+# runs it. It exists because discovery, a WebSocket handshake and a pairing
+# round trip cannot be proved against a mock — only against the real daemon.
+add_executable(bridge_live ${NEV_BRIDGE_DIR}/test/bridge_live.c)
+target_link_libraries(bridge_live PRIVATE nevos_core)
+set_target_properties(bridge_live PROPERTIES C_STANDARD 11 C_EXTENSIONS ON)

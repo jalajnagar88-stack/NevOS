@@ -23,7 +23,9 @@
 extern "C" {
 #endif
 
-#define NEV_STORE_STR_MAX 64
+/* Sized by the longest string any setting holds: a 64-character pairing token
+ * plus its NUL, with a little room. A token that does not fit is not a token. */
+#define NEV_STORE_STR_MAX 72
 #define NEV_STORE_KEY_MAX 24
 
 /*
@@ -49,8 +51,12 @@ extern "C" {
     X(TIME_24H, BOOL, "time_24h", "1", 0, 1)                                                       \
     /* identity and pairing */                                                                     \
     X(DEVICE_NAME, STR, "device_name", "NEVOS", 1, 24)                                             \
+    /* Generated once on first boot and kept. Not derived from the MAC: a                          \
+       factory reset should unpair the device, not give it a new identity that                     \
+       the daemon then lists as a second robot. */                                                 \
+    X(DEVICE_ID, STR, "device_id", "", 0, 32)                                                      \
     X(WIFI_SSID, STR, "wifi_ssid", "", 0, 32)                                                      \
-    X(PAIR_TOKEN, STR, "pair_token", "", 0, 63)                                                    \
+    X(PAIR_TOKEN, STR, "pair_token", "", 0, 64)                                                    \
     /* game high scores, owned by the shared table in game_engine */                               \
     X(HS_SNAKE, U32, "hs_snake", "0", 0, 999999)                                                   \
     X(SNAKE_WRAP, BOOL, "snake_wrap", "0", 0, 1)                                                   \

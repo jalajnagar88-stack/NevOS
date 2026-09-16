@@ -77,10 +77,28 @@ static void test_out_of_range_writes_are_clamped_not_rejected(void) {
     TEST_ASSERT_EQUAL_UINT32(5, nev_store_num(NEV_SET_BRIGHTNESS)); /* min is 5 */
 }
 
-static void test_long_strings_are_truncated_to_the_declared_length(void) {
+/*
+ * Strings are the exception to the clamping rule above, and it cost a bug to
+ * learn why. A 64-character pairing token was stored against a 63-character
+ * limit; truncating it produced a token that was silently and permanently
+ * wrong, so the device re-paired on every reconnect with nothing reporting an
+ * error. A number that saturates is still a usable brightness. A token missing
+ * its last character is not a token.
+ */
+static void test_a_too_long_string_is_refused_rather_than_truncated(void) {
     const char *too_long = "a-device-name-considerably-longer-than-the-schema-permits";
-    TEST_ASSERT_EQUAL_INT(NEV_OK, nev_store_set_str(NEV_SET_DEVICE_NAME, too_long));
-    TEST_ASSERT_EQUAL_UINT32(24, (uint32_t)strlen(nev_store_str(NEV_SET_DEVICE_NAME)));
+    TEST_ASSERT_EQUAL_INT(NEV_ERR_INVALID_ARG, nev_store_set_str(NEV_SET_DEVICE_NAME, too_long));
+    /* And the previous value is untouched, rather than half-replaced. */
+    TEST_ASSERT_EQUAL_STRING("NEVOS", nev_store_str(NEV_SET_DEVICE_NAME));
+}
+
+static void test_a_string_of_exactly_the_declared_length_fits(void) {
+    /* The off-by-one that started all this: the limit must be inclusive. */
+    char exact[65];
+    memset(exact, 'a', 64);
+    exact[64] = '\0';
+    TEST_ASSERT_EQUAL_INT(NEV_OK, nev_store_set_str(NEV_SET_PAIR_TOKEN, exact));
+    TEST_ASSERT_EQUAL_STRING(exact, nev_store_str(NEV_SET_PAIR_TOKEN));
 }
 
 static void test_writing_the_same_value_does_not_dirty_the_store(void) {
@@ -198,7 +216,8 @@ int main(void) {
     RUN_TEST(test_defaults_are_inside_their_declared_range);
     RUN_TEST(test_fresh_store_returns_defaults);
     RUN_TEST(test_out_of_range_writes_are_clamped_not_rejected);
-    RUN_TEST(test_long_strings_are_truncated_to_the_declared_length);
+    RUN_TEST(test_a_too_long_string_is_refused_rather_than_truncated);
+    RUN_TEST(test_a_string_of_exactly_the_declared_length_fits);
     RUN_TEST(test_writing_the_same_value_does_not_dirty_the_store);
     RUN_TEST(test_changes_are_published_on_the_bus);
     RUN_TEST(test_writeback_waits_for_changes_to_settle);

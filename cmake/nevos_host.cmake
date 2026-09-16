@@ -29,6 +29,7 @@ add_library(nevos_core STATIC
   ${NEV_PERSONA_DIR}/src/face_presets.c
   ${NEV_PERSONA_DIR}/src/persona_core.c
   ${NEV_BRIDGE_CODEC_SRCS}
+  ${NEV_BRIDGE_TRANSPORT_SRCS}
 )
 target_include_directories(nevos_core PUBLIC
   ${NEV_PORT_INCLUDE_DIRS}
@@ -36,6 +37,9 @@ target_include_directories(nevos_core PUBLIC
   ${NEV_PERSONA_INCLUDE_DIRS}
   ${NEV_BRIDGE_INCLUDE_DIRS}
 )
+# The one thing the socket layer needs to know about its target: the host link
+# is always up, where the device's depends on Wi-Fi.
+target_compile_definitions(nevos_core PUBLIC NEV_TARGET_HOST)
 target_link_libraries(nevos_core PUBLIC m)
 set_target_properties(nevos_core PROPERTIES C_STANDARD 11 C_EXTENSIONS ON)
 target_link_libraries(nevos_core PUBLIC nevos_warnings)

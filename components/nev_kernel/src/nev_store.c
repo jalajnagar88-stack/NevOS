@@ -172,10 +172,23 @@ nev_err_t nev_store_set_str(nev_setting_t key, const char *value) {
     NEV_REQUIRE(is_text(key), NEV_ERR_INVALID_ARG);
     if (!s_ready) return NEV_ERR_INVALID_STATE;
 
-    char candidate[NEV_STORE_STR_MAX];
+    /*
+     * Too long is refused, not truncated.
+     *
+     * Numbers saturate, and that is right for a brightness of 200. A string is
+     * different: the first one stored here was a 64-character pairing token
+     * against a 63-character limit, and truncating it produced a token that was
+     * silently, permanently wrong — the device re-paired on every reconnect and
+     * nothing reported an error. A value that does not fit is a bug in the
+     * caller, and it should hear about it.
+     */
+    const char *text = value ? value : "";
     const size_t limit =
         kDesc[key].max < NEV_STORE_STR_MAX ? kDesc[key].max : NEV_STORE_STR_MAX - 1;
-    snprintf(candidate, limit + 1, "%s", value ? value : "");
+    if (strlen(text) > limit) return NEV_ERR_INVALID_ARG;
+
+    char candidate[NEV_STORE_STR_MAX];
+    snprintf(candidate, limit + 1, "%s", text);
     if (strcmp(candidate, s_slot[key].str) == 0) return NEV_OK;
 
     memcpy(s_slot[key].str, candidate,
