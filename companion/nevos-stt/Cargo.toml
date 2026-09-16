@@ -1,0 +1,12 @@
+[package]
+name = "nevos-stt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Pluggable speech-to-text for NEVOS. Local by default."
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+tracing.workspace = true

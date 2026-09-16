@@ -1,0 +1,16 @@
+[package]
+name = "nevosd"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The NEVOS companion daemon. Runs on the user's own machine."
+
+[dependencies]
+nevos-proto.workspace = true
+nevos-store.workspace = true
+nevos-stt.workspace = true
+nevos-agent.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

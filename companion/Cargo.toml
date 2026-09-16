@@ -7,12 +7,26 @@
 # codec exists to prevent.
 [workspace]
 resolver = "2"
-members = ["nevos-proto"]
+members = ["nevos-proto", "nevos-store", "nevos-stt", "nevos-agent", "nevosd"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
+
+[workspace.dependencies]
+nevos-proto = { path = "nevos-proto" }
+nevos-store = { path = "nevos-store" }
+nevos-stt = { path = "nevos-stt" }
+nevos-agent = { path = "nevos-agent" }
+
+anyhow = "1"
+async-trait = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time", "process", "fs", "signal"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [profile.release]
 opt-level = 2
