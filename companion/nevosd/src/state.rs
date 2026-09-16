@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
 
 use crate::pairing::{EntryOutcome, Pairing};
-use crate::session::Authenticator;
+use crate::session::{Authenticator, Out};
 
 /// Sent to a waiting connection when the user completes pairing at the desktop.
 #[derive(Debug, Clone)]
@@ -34,6 +34,10 @@ pub struct Daemon {
     pairing: Mutex<Pairing>,
     conversations: Mutex<HashMap<String, Conversation>>,
     grants: broadcast::Sender<Grant>,
+    /// Messages for every connected device. A broadcast rather than a list of
+    /// senders: connections come and go on their own tasks, and a registry
+    /// would need pruning at exactly the moments a device is disappearing.
+    to_devices: broadcast::Sender<Out>,
     /// How many devices are streaming audio right now. The tray's live
     /// indicator reads this, and it is incremented by audio arriving rather
     /// than by anything announcing an intention to record.
@@ -50,6 +54,7 @@ impl Daemon {
         keep_audio: bool,
     ) -> Self {
         let (grants, _) = broadcast::channel(16);
+        let (to_devices, _) = broadcast::channel(16);
         Self {
             name: name.into(),
             store,
@@ -59,6 +64,7 @@ impl Daemon {
             pairing: Mutex::new(Pairing::new()),
             conversations: Mutex::new(HashMap::new()),
             grants,
+            to_devices,
             capturing: AtomicUsize::new(0),
             connected: Mutex::new(Vec::new()),
         }
@@ -66,6 +72,25 @@ impl Daemon {
 
     pub fn subscribe_grants(&self) -> broadcast::Receiver<Grant> {
         self.grants.subscribe()
+    }
+
+    pub fn subscribe_to_devices(&self) -> broadcast::Receiver<Out> {
+        self.to_devices.subscribe()
+    }
+
+    /// Puts a notification on every paired, connected device. Returns how many
+    /// will actually show it.
+    pub fn notify(&self, notification: nevos_proto::Notification) -> usize {
+        let _ = self.to_devices.send(Out::Notification(notification));
+        /*
+         * Deliberately not the broadcast channel's subscriber count. Every
+         * connection subscribes as soon as the socket opens, including one
+         * still showing a pairing code — and that connection drops the message,
+         * because a device nobody has paired is not yet anyone's robot. The
+         * count that is useful to the caller is the number of devices that will
+         * put the message on screen.
+         */
+        self.connected_devices().len()
     }
 
     /// A device is showing a pairing code.

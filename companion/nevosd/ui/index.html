@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEVOS</title>
+<style>
+  /* The device's palette, so the two halves of the product look like one
+     thing. These are the same values as components/nev_appkit/theme.h. */
+  :root {
+    --bg: #0B0E14;
+    --surface: #141A23;
+    --surface-alt: #1D2633;
+    --line: #263041;
+    --ink: #E6EDF3;
+    --ink-muted: #8B949E;
+    --ink-faint: #5A6472;
+    --accent: #4C8DFF;
+    --success: #35D0BA;
+    --warn: #E8A33D;
+    --danger: #F2545B;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    padding: 24px 20px 48px;
+    max-width: 680px;
+    margin-inline: auto;
+  }
+  h1 { font-size: 20px; margin: 0; font-weight: 600; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em;
+       color: var(--ink-faint); margin: 32px 0 12px; font-weight: 600; }
+  header { display: flex; align-items: baseline; gap: 12px; }
+  header .sub { color: var(--ink-faint); font-size: 13px; }
+
+  /* The mic indicator.
+
+     This is the loudest thing on the page on purpose. It is the one claim the
+     product makes that a person cannot verify for themselves, so when the
+     microphone is live it takes a whole band across the top, changes the tab
+     title, and pulses. When it is not, it says so plainly rather than being
+     absent — an indicator you only see when something is wrong teaches people
+     to ignore the space where it lives. */
+  .mic {
+    margin-top: 16px; padding: 14px 16px; border-radius: 12px;
+    display: flex; align-items: center; gap: 12px;
+    border: 1px solid var(--line); background: var(--surface);
+    color: var(--ink-muted);
+  }
+  .mic .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--ink-faint); flex: none; }
+  .mic.live {
+    background: rgba(242, 84, 91, .14);
+    border-color: var(--danger);
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .mic.live .dot { background: var(--danger); animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  @media (prefers-reduced-motion: reduce) { .mic.live .dot { animation: none; } }
+
+  .card { background: var(--surface); border: 1px solid var(--line);
+          border-radius: 12px; padding: 16px; }
+  .row { display: flex; justify-content: space-between; align-items: center;
+         gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: 0; }
+  .row .k { color: var(--ink-muted); }
+  .row .v { text-align: right; }
+  .local { color: var(--success); }
+  .remote { color: var(--warn); }
+  .muted { color: var(--ink-faint); }
+
+  button {
+    font: inherit; border-radius: 9px; padding: 9px 14px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--surface-alt); color: var(--ink);
+  }
+  button:hover { border-color: var(--accent); }
+  button.danger { border-color: rgba(242,84,91,.5); color: var(--danger); }
+  button.danger:hover { background: rgba(242,84,91,.12); border-color: var(--danger); }
+  button:disabled { opacity: .45; cursor: default; border-color: var(--line); }
+
+  input[type=text] {
+    font: inherit; background: var(--bg); color: var(--ink); letter-spacing: .3em;
+    border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; width: 8em;
+  }
+  input[type=text]:focus { outline: none; border-color: var(--accent); }
+
+  .note { background: var(--surface); border: 1px solid var(--line);
+          border-radius: 10px; padding: 12px 14px; margin-bottom: 8px;
+          display: flex; gap: 12px; align-items: flex-start; }
+  .note .text { flex: 1; }
+  .note time { display: block; color: var(--ink-faint); font-size: 12px; margin-top: 4px; }
+  .note button { padding: 4px 9px; font-size: 13px; }
+
+  .empty { color: var(--ink-faint); padding: 8px 0; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+  footer { margin-top: 40px; color: var(--ink-faint); font-size: 12px; }
+  .pill { font-size: 12px; padding: 2px 8px; border-radius: 999px;
+          border: 1px solid var(--line); color: var(--ink-muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>NEVOS</h1>
+  <span class="sub" id="daemon"></span>
+</header>
+
+<div class="mic" id="mic">
+  <span class="dot"></span>
+  <span id="micText">Checking…</span>
+</div>
+
+<h2>Where the work happens</h2>
+<div class="card">
+  <div class="row"><span class="k">Agent</span><span class="v" id="agent"></span></div>
+  <div class="row"><span class="k">Transcription</span><span class="v" id="stt"></span></div>
+  <div class="row"><span class="k">Recordings</span><span class="v" id="audio"></span></div>
+  <div class="row"><span class="k">Files</span><span class="v muted" id="dir"></span></div>
+</div>
+
+<h2>Devices</h2>
+<div class="card" id="devices"></div>
+<div id="pairing"></div>
+
+<h2>Notes</h2>
+<div id="notes"></div>
+
+<h2>Your data</h2>
+<div class="card">
+  <div class="row">
+    <span class="k">Delete recordings, keep the text</span>
+    <button id="purgeAudio">Delete audio</button>
+  </div>
+  <div class="row">
+    <span class="k">Delete every note, transcript and recording</span>
+    <button class="danger" id="purgeAll">Delete everything</button>
+  </div>
+  <p class="muted" style="margin:12px 0 0">
+    Deleting everything keeps your paired devices, so the robot on your desk
+    does not have to be set up again.
+  </p>
+</div>
+
+<footer>
+  Everything here runs on this computer. <span id="version"></span>
+</footer>
+
+<script>
+// Polling rather than a socket: this page talks to a daemon on loopback, and
+// two requests a second costs less than the machinery to avoid them. It backs
+// off when the tab is hidden, because a menu-bar app is open all day.
+const FAST_MS = 500, SLOW_MS = 5000;
+let timer = null, lastMic = null;
+
+const $ = (id) => document.getElementById(id);
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  if (!res.ok) throw new Error(await res.text());
+  return res.status === 204 ? null : res.json();
+}
+
+function when(unix) {
+  if (!unix) return '';
+  const d = new Date(unix * 1000);
+  return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function backend(b) {
+  // The one line on this page that has to be exactly true. It reports what the
+  // backend says about itself, not what a config file claims.
+  const cls = b.local ? 'local' : 'remote';
+  const where = b.local ? 'on this computer' : 'off this computer';
+  return `<span class="${cls}">${b.name}</span> <span class="muted">— ${where}</span>`;
+}
+
+function renderMic(live) {
+  if (live === lastMic) return;
+  lastMic = live;
+  $('mic').classList.toggle('live', live);
+  $('micText').textContent = live
+    ? 'Microphone is live — audio is being sent to this computer'
+    : 'Microphone is off';
+  // Visible even when the tab is not.
+  document.title = live ? '● NEVOS — mic live' : 'NEVOS';
+}
+
+function renderDevices(devices, pending) {
+  const box = $('devices');
+  if (!devices.length) {
+    box.innerHTML = '<div class="empty">No devices paired yet.</div>';
+  } else {
+    box.innerHTML = devices.map(d => `
+      <div class="row">
+        <span class="k">
+          ${d.device_id}
+          <span class="pill">${d.connected ? 'connected' : 'last seen ' + when(d.last_seen)}</span>
+        </span>
+        <button class="danger" data-forget="${d.device_id}">Unpair</button>
+      </div>`).join('');
+  }
+
+  const pair = $('pairing');
+  if (pending.length) {
+    pair.innerHTML = `
+      <div class="card" style="margin-top:12px">
+        <div class="row" style="border:0">
+          <span class="k">A device is asking to pair. Type the code on its screen.</span>
+          <span><input type="text" id="code" inputmode="numeric" maxlength="6" placeholder="000000">
+          <button id="pairBtn">Pair</button></span>
+        </div>
+        <div class="muted" id="pairMsg"></div>
+      </div>`;
+    $('pairBtn').onclick = submitCode;
+    $('code').onkeydown = (e) => { if (e.key === 'Enter') submitCode(); };
+  } else if (!pair.dataset.sticky) {
+    pair.innerHTML = '';
+  }
+}
+
+async function submitCode() {
+  const code = $('code').value.trim();
+  const msg = $('pairMsg');
+  try {
+    await api('/api/pair', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+    msg.textContent = 'Paired.';
+  } catch (e) {
+    // The daemon's own words: it distinguishes a wrong code from a lockout,
+    // and repeating that back is more useful than "something went wrong".
+    msg.textContent = String(e.message || e).slice(0, 200);
+  }
+}
+
+function renderNotes(notes) {
+  const box = $('notes');
+  if (!notes.length) {
+    box.innerHTML = '<div class="empty">Nothing dictated yet.</div>';
+    return;
+  }
+  box.innerHTML = notes.map(n => `
+    <div class="note">
+      <span class="text">${escapeHtml(n.text)}<time>${when(n.created_at)}${n.audio ? ' · audio kept' : ''}</time></span>
+      <button data-delete="${escapeHtml(n.id)}">Delete</button>
+    </div>`).join('');
+}
+
+// Notes are whatever a microphone heard in someone's house. Putting that into
+// innerHTML unescaped would make a spoken sentence a script tag.
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+async function refresh() {
+  try {
+    const [status, notes] = await Promise.all([
+      api('/api/status'),
+      api('/api/records?kind=note')
+    ]);
+
+    renderMic(status.mic_live);
+    $('daemon').textContent = status.daemon;
+    $('version').textContent = 'nevosd ' + status.version;
+    $('agent').innerHTML = backend(status.agent);
+    $('stt').innerHTML = backend(status.transcriber);
+    $('audio').innerHTML = status.keep_audio
+      ? '<span class="warn">kept on disk</span>'
+      : '<span class="muted">not kept</span>';
+    $('dir').textContent = status.data_dir;
+    renderDevices(status.devices, status.pending_pairings);
+    renderNotes(notes);
+  } catch (e) {
+    $('micText').textContent = 'Cannot reach the daemon';
+    $('mic').classList.remove('live');
+  }
+}
+
+document.addEventListener('click', async (e) => {
+  const forget = e.target.dataset && e.target.dataset.forget;
+  const del = e.target.dataset && e.target.dataset.delete;
+  if (forget) {
+    if (!confirm(`Unpair ${forget}? It will show a code again next time it connects.`)) return;
+    await api('/api/forget', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ device_id: forget })
+    });
+    refresh();
+  } else if (del) {
+    await api('/api/records/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'note', id: del })
+    });
+    refresh();
+  }
+});
+
+$('purgeAudio').onclick = async () => {
+  if (!confirm('Delete every recording? The text of your notes is kept.')) return;
+  const r = await api('/api/purge/audio', { method: 'POST' });
+  alert(`${r.removed} recording(s) deleted.`);
+  refresh();
+};
+
+$('purgeAll').onclick = async () => {
+  // Two steps, because this one cannot be undone and the button is one click
+  // away from a button that deletes much less.
+  if (!confirm('Delete every note, transcript and recording on this computer?')) return;
+  if (!confirm('This cannot be undone. Your paired devices are kept. Continue?')) return;
+  const r = await api('/api/purge/all', { method: 'POST' });
+  alert(`${r.removed} file(s) deleted.`);
+  refresh();
+};
+
+function schedule() {
+  clearInterval(timer);
+  timer = setInterval(refresh, document.hidden ? SLOW_MS : FAST_MS);
+}
+document.addEventListener('visibilitychange', schedule);
+schedule();
+refresh();
+</script>
+</body>
+</html>

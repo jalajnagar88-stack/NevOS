@@ -15,7 +15,7 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use futures_util::{SinkExt, StreamExt};
 use nevos_agent::{AgentEvent, AgentRequest, Turn};
-use nevos_proto::{frame_split, AgentDone, AgentToken, MoodHint, TranscriptFinal};
+use nevos_proto::{frame_split, AgentDone, AgentToken, MoodHint, Notification, TranscriptFinal};
 use nevos_store::{now_unix, Record, RecordKind};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
@@ -93,6 +93,7 @@ async fn connection(socket: WebSocket, state: Arc<Daemon>) {
 
     let mut session = Session::new(&state.name);
     let mut grants = state.subscribe_grants();
+    let mut to_devices = state.subscribe_to_devices();
     let mut buf: Vec<u8> = Vec::new();
     let mut turn: Option<JoinHandle<()>> = None;
     // Which turn the device is waiting on. An aborted task can still have a
@@ -136,6 +137,14 @@ async fn connection(socket: WebSocket, state: Arc<Daemon>) {
                     // Lagged means grants were issued faster than this
                     // connection read them; the device can reconnect.
                     Err(_) => Vec::new(),
+                }
+            }
+            broadcast = to_devices.recv() => {
+                match broadcast {
+                    // Only a paired, connected device gets these: a device
+                    // still showing a pairing code is not yet anyone's robot.
+                    Ok(out) if session.is_ready() => vec![Action::Send(out)],
+                    _ => Vec::new(),
                 }
             }
             _ = tokio::time::sleep(IDLE_TIMEOUT) => {
@@ -485,6 +494,22 @@ struct ForgetBody {
 }
 
 #[derive(Deserialize)]
+struct DeleteBody {
+    #[serde(default)]
+    kind: String,
+    id: String,
+}
+
+#[derive(Deserialize)]
+struct NotifyBody {
+    title: String,
+    #[serde(default)]
+    body: String,
+    #[serde(default)]
+    urgent: bool,
+}
+
+#[derive(Deserialize)]
 struct RecordsQuery {
     #[serde(default)]
     kind: String,
@@ -499,10 +524,16 @@ pub async fn run_control_listener(state: Arc<Daemon>, addr: SocketAddr) -> Resul
     }
 
     let app = Router::new()
+        // The control panel itself: one file, embedded in the binary. A menu
+        // bar app would be a nicer front door and is a separate question — this
+        // is the page it would show, and it needs no toolchain to run.
+        .route("/", get(page))
         .route("/api/status", get(status))
         .route("/api/pair", post(pair))
         .route("/api/forget", post(forget))
         .route("/api/records", get(records))
+        .route("/api/records/delete", post(delete_record))
+        .route("/api/notify", post(notify))
         .route("/api/purge/audio", post(purge_audio))
         .route("/api/purge/all", post(purge_all))
         .with_state(state);
@@ -515,6 +546,16 @@ pub async fn run_control_listener(state: Arc<Daemon>, addr: SocketAddr) -> Resul
         }
     });
     Ok(port)
+}
+
+/// The control panel. Embedded rather than read from disk so that `nevosd` is
+/// still one file you can copy somewhere and run.
+async fn page() -> Response {
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        include_str!("../ui/index.html"),
+    )
+        .into_response()
 }
 
 async fn status(State(state): State<Arc<Daemon>>) -> Json<Status> {
@@ -587,6 +628,32 @@ async fn records(
         Ok(records) => Json(records).into_response(),
         Err(e) => internal(e),
     }
+}
+
+async fn delete_record(State(state): State<Arc<Daemon>>, Json(body): Json<DeleteBody>) -> Response {
+    let kind = match body.kind.as_str() {
+        "transcript" => RecordKind::Transcript,
+        _ => RecordKind::Note,
+    };
+    match state.store.delete_record(kind, &body.id) {
+        Ok(existed) => Json(serde_json::json!({ "deleted": existed })).into_response(),
+        Err(e) => internal(e),
+    }
+}
+
+/// Sends a notification to every connected device.
+///
+/// The daemon knows things the device cannot — a build finished, a meeting
+/// starts in five minutes — and this is how a script on the user's own machine
+/// puts one on the robot's face. It is on the loopback API rather than the
+/// device link because the sender is always something local.
+async fn notify(State(state): State<Arc<Daemon>>, Json(body): Json<NotifyBody>) -> Response {
+    let sent = state.notify(Notification {
+        title: truncate_chars(&body.title, 48),
+        body: truncate_chars(&body.body, 160),
+        urgent: body.urgent,
+    });
+    Json(serde_json::json!({ "sent_to": sent })).into_response()
 }
 
 async fn purge_audio(State(state): State<Arc<Daemon>>) -> Response {

@@ -40,7 +40,9 @@ computer and needs nothing installed to try:
 cd companion && cargo run -p nevosd -- --mock
 ```
 
-No account, no API key, no cloud service — see [docs/daemon.md](docs/daemon.md).
+Then open <http://127.0.0.1:4822/> for the control panel: what is running where,
+your notes, and a one-click purge. No account, no API key, no cloud service —
+see [docs/daemon.md](docs/daemon.md).
 
 With the daemon running, the simulator can talk to it:
 

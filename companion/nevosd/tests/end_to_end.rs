@@ -12,7 +12,7 @@ use futures_util::{SinkExt, StreamExt};
 use nevos_agent::MockAgent;
 use nevos_proto::{
     frame_split, frame_wrap, peek_id, AgentDone, AgentRequest, AgentToken, AudioChunk, Hello,
-    HelloAck, MoodHint, MsgId, Pair, PairResult, TranscriptFinal, PROTOCOL_VERSION,
+    HelloAck, MoodHint, MsgId, Notification, Pair, PairResult, TranscriptFinal, PROTOCOL_VERSION,
 };
 use nevos_store::Store;
 use nevos_stt::MockTranscriber;
@@ -367,4 +367,83 @@ async fn purging_erases_the_notes_and_keeps_the_pairing() {
     send(&mut socket, hello(&token)).await;
     let (_, payload) = recv(&mut socket).await;
     assert!(HelloAck::decode(&payload).unwrap().accepted);
+}
+
+#[tokio::test]
+async fn a_notification_reaches_a_paired_device() {
+    let h = start("notify").await;
+    let mut socket = h.connect().await;
+    pair(&h, &mut socket).await;
+
+    // Anything local can put a message on the robot's face: a build script, a
+    // calendar hook, a cron job. It goes through the loopback API because the
+    // sender is always something on this machine.
+    let reply = h
+        .control("/api/notify", r#"{"title":"Build finished","body":"all green"}"#)
+        .await;
+    assert!(reply.contains("\"sent_to\":1"), "{reply}");
+
+    let (id, payload) = recv(&mut socket).await;
+    assert_eq!(id, MsgId::Notification);
+    let note = Notification::decode(&payload).unwrap();
+    assert_eq!(note.title, "Build finished");
+    assert_eq!(note.body, "all green");
+}
+
+#[tokio::test]
+async fn an_unpaired_device_is_not_sent_notifications() {
+    // A device on the network that has not been paired is not yet anyone's
+    // robot, and whatever the notification says is none of its business.
+    let h = start("notify-unpaired").await;
+    let mut socket = h.connect().await;
+    send(&mut socket, hello("")).await;
+    recv(&mut socket).await; // hello_ack: needs pairing
+
+    let reply = h.control("/api/notify", r#"{"title":"secret"}"#).await;
+    assert!(reply.contains("\"sent_to\":0"), "{reply}");
+}
+
+#[tokio::test]
+async fn one_note_can_be_deleted_without_deleting_the_rest() {
+    let h = start("delete-one").await;
+    for id in ["a", "b"] {
+        h.state
+            .store
+            .save_record(&nevos_store::Record {
+                id: id.into(),
+                kind: nevos_store::RecordKind::Note,
+                created_at: 1,
+                text: format!("note {id}"),
+                markers: vec![],
+                audio: None,
+            })
+            .unwrap();
+    }
+
+    let reply = h.control("/api/records/delete", r#"{"kind":"note","id":"a"}"#).await;
+    assert!(reply.contains("\"deleted\":true"), "{reply}");
+
+    let left = h.state.store.records(nevos_store::RecordKind::Note).unwrap();
+    assert_eq!(left.len(), 1);
+    assert_eq!(left[0].id, "b");
+}
+
+#[tokio::test]
+async fn the_control_panel_is_served_on_loopback() {
+    let h = start("panel").await;
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let port = h.control_port;
+    let task =
+        tokio::spawn(async move { nevos_agent::http::get_lines("127.0.0.1", port, "/", tx).await });
+
+    let mut page = String::new();
+    while let Some(line) = rx.recv().await {
+        page.push_str(&line);
+    }
+    task.await.unwrap().unwrap();
+
+    assert!(page.contains("<!doctype html>"), "the panel is not being served");
+    // The two things the panel exists for.
+    assert!(page.contains("Microphone is off"));
+    assert!(page.contains("Delete everything"));
 }

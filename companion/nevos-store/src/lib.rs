@@ -168,6 +168,39 @@ impl Store {
         Ok(out)
     }
 
+    /// Deletes one record, and the audio kept with it.
+    ///
+    /// A purge that can only take everything is not really a delete control: the
+    /// thing people actually want is to remove the one note that should not have
+    /// been recorded, and leaving them the choice of "keep it or lose the lot"
+    /// is how you end up with neither.
+    pub fn delete_record(&self, kind: RecordKind, id: &str) -> Result<bool> {
+        // The id becomes a filename, so it must not be able to climb out of the
+        // directory. It comes from the daemon today, and from an HTTP request
+        // one refactor from now.
+        if id.is_empty() || id.contains('/') || id.contains('\\') || id.contains("..") {
+            anyhow::bail!("refusing to delete a record with a suspicious id: {id:?}");
+        }
+
+        let path = self.root.join(kind.dir()).join(format!("{id}.json"));
+        if !path.exists() {
+            return Ok(false);
+        }
+
+        // The audio goes first: if this fails halfway, an orphaned recording is
+        // worse than an orphaned note, because the note is the part the user can
+        // see and ask about again.
+        if let Ok(raw) = fs::read_to_string(&path) {
+            if let Ok(rec) = serde_json::from_str::<Record>(&raw) {
+                if let Some(audio) = rec.audio {
+                    let _ = fs::remove_file(self.root.join("audio").join(audio));
+                }
+            }
+        }
+        fs::remove_file(&path)?;
+        Ok(true)
+    }
+
     pub fn save_audio(&self, id: &str, wav: &[u8]) -> Result<PathBuf> {
         let path = self.root.join("audio").join(format!("{id}.wav"));
         write_atomic(&path, wav)?;
@@ -375,5 +408,36 @@ mod tests {
         let again = Store::open(&dir).unwrap();
         assert_eq!(again.records(RecordKind::Note).unwrap().len(), 1);
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn one_record_can_be_deleted_with_its_audio() {
+        let (store, root) = temp_store();
+        store.save_record(&note("r1")).unwrap();
+        store.save_record(&note("r2")).unwrap();
+        store.save_audio("r1", b"RIFF....").unwrap();
+
+        assert!(store.delete_record(RecordKind::Note, "r1").unwrap());
+        let left = store.records(RecordKind::Note).unwrap();
+        assert_eq!(left.len(), 1);
+        assert_eq!(left[0].id, "r2");
+        assert!(!root.join("audio/r1.wav").exists(), "the recording outlived its note");
+    }
+
+    #[test]
+    fn deleting_something_that_is_not_there_is_not_an_error() {
+        let (store, _root) = temp_store();
+        assert!(!store.delete_record(RecordKind::Note, "nope").unwrap());
+    }
+
+    #[test]
+    fn an_id_that_climbs_out_of_the_directory_is_refused() {
+        // The id is a filename. Today it comes from the daemon; tomorrow it
+        // comes from an HTTP request, and "../../.ssh/id_rsa" should not be a
+        // thing this function will delete.
+        let (store, _root) = temp_store();
+        for bad in ["../devices/mine", "a/b", "..", ""] {
+            assert!(store.delete_record(RecordKind::Note, bad).is_err(), "{bad:?} was accepted");
+        }
     }
 }

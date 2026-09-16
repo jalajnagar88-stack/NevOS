@@ -80,6 +80,38 @@ Tokens are 32 random bytes as hex, stored on the device in NVS and on this
 machine in the data directory. A token is bound to the device id that was issued
 it: a token read out of one robot's flash does not authenticate a second one.
 
+## The control panel
+
+Open <http://127.0.0.1:4822/> while the daemon is running. It is one HTML file
+embedded in the binary, served on the same loopback listener as the API, so
+there is nothing to install and nothing extra to run.
+
+The microphone indicator is the loudest thing on the page on purpose. It is the
+one claim this product makes that a person cannot verify for themselves, so when
+audio is arriving it takes a band across the top, pulses, and changes the tab
+title to `● NEVOS — mic live` — visible even when the tab is not. When audio is
+not arriving it says so plainly rather than disappearing: an indicator you only
+ever see when something is wrong teaches people to ignore the space where it
+lives.
+
+It is driven by audio actually arriving from a device, not by anything
+announcing an intention to record.
+
+A menu bar or system tray app would be a nicer front door, and this page is what
+it would show. That is a separate piece of work — it needs a GUI toolchain per
+platform — and none of the behaviour here depends on it.
+
+### Trying it without hardware
+
+```sh
+cargo run -p nevosd --example fake_device            # pairs, then streams audio
+cargo run -p nevosd --example fake_device -- --dictate   # three notes, then exits
+```
+
+The fake device pairs itself by reading its own code back through the control
+API, which is exactly what a person at the keyboard does. It exists because the
+microphone indicator cannot be designed against a state that never occurs.
+
 ## Control API
 
 All on `127.0.0.1:4822`.
@@ -90,11 +122,18 @@ All on `127.0.0.1:4822`.
 | `POST /api/pair` | `{"code": "424242"}` — completes a pairing |
 | `POST /api/forget` | `{"device_id": "..."}` — unpairs |
 | `GET /api/records?kind=note` | notes, or `kind=transcript` |
+| `POST /api/records/delete` | `{"kind": "note", "id": "..."}` — deletes one record and its audio |
+| `POST /api/notify` | `{"title": "...", "body": "...", "urgent": false}` — puts a message on every paired device |
 | `POST /api/purge/audio` | deletes retained audio, keeps the text |
 | `POST /api/purge/all` | deletes every note, transcript and recording, keeps pairing |
 
 `mic_live` is driven by audio actually arriving, not by anything announcing an
 intention to record. The tray shows it as the largest thing on the panel.
+
+`records/delete` is there because a purge that can only take everything is not
+really a delete control: what people want is to remove the one note that should
+not have been recorded, and offering only "keep it or lose the lot" means they
+end up with neither.
 
 `purge/all` deliberately keeps device pairings: erasing your notes should not
 also mean setting the robot up again. It also clears the in-memory conversation
