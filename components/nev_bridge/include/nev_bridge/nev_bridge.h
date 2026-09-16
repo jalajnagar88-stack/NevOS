@@ -72,6 +72,17 @@ bool nev_bridge_ask(uint32_t turn, const char *text, const char *app);
 bool nev_bridge_send_audio(uint32_t session, uint32_t seq, bool final, const int16_t *pcm,
                            size_t samples);
 
+/*
+ * Marks this moment in a running capture, for meeting mode.
+ *
+ * `at_seconds` is the device's own count of how far into the recording it is.
+ * Sent rather than left to the daemon because the point of a marker is that a
+ * person decided something mattered, and only the device knows when they
+ * pressed the button — the daemon is still transcribing what was said a minute
+ * ago.
+ */
+bool nev_bridge_mark(uint32_t session, float at_seconds);
+
 /* Forgets the pairing. The next connection starts over with a new code. */
 void nev_bridge_forget(void);
 

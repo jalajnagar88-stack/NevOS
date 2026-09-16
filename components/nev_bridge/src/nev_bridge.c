@@ -54,9 +54,18 @@ typedef struct {
     uint32_t last_ping_ms;
 
     uint8_t scratch[ENCODE_CAP];
+
+    /* Audio arrives as bus events from audio_service, which has never heard of
+     * a daemon. See nev_bridge.h. */
+    nev_sub_t *sub;
 } bridge_t;
 
 static bridge_t s_bridge;
+
+/* The kind of the capture currently being forwarded, taken from the audio
+ * event. It travels on the wire per chunk, but the device only ever has one
+ * capture running at a time. */
+static uint8_t s_audio_kind;
 
 /* ----------------------------------------------------------------- helpers */
 
@@ -88,9 +97,19 @@ static void publish_text(uint16_t type, const char *text, uint32_t extra) {
     ev.p.blob.handle = handle;
     ev.p.blob.len = (uint32_t)len;
     ev.p.blob.chunk_seq = (uint16_t)extra;
-    if (nev_bus_publish(&ev) != NEV_OK) {
-        nev_blob_release(handle);
-    }
+    (void)nev_bus_publish(&ev);
+
+    /*
+     * Step 3 of the ownership protocol in nev_blob.h: the publisher releases
+     * its own reference right after publishing, whether or not anyone took it.
+     * The bus has already retained once per accepted delivery, so this hands
+     * the buffer over rather than freeing it.
+     *
+     * Missing this leaks one reference per published blob, which is invisible
+     * until the pool runs dry — and then it shows up as audio being dropped,
+     * two subsystems away from the mistake.
+     */
+    nev_blob_release(handle);
 }
 
 /* Wraps an encoded payload in its length prefix and sends it. */
@@ -366,6 +385,18 @@ void nev_bridge_init(void) {
     s_bridge.backoff_ms = BACKOFF_MIN_MS;
     s_bridge.started = true;
 
+    const nev_sub_cfg_t sub = {
+        .name = "bridge",
+        .domains = NEV_DOM(AUDIO),
+        .depth = 12,
+        /* Audio is a stream with a sequence number: losing the oldest chunk
+         * leaves a gap the daemon can see, where losing the newest would stall
+         * the capture behind a backlog it can never clear. */
+        .full_policy = NEV_FULL_DROP_OLDEST,
+    };
+    s_bridge.sub = nev_bus_subscribe(&sub);
+    if (!s_bridge.sub) NEV_LOGE(TAG, "no subscriber slot; audio will not be sent");
+
     snprintf(s_bridge.token, sizeof(s_bridge.token), "%s", nev_store_str(NEV_SET_PAIR_TOKEN));
 
     const char *stored_id = nev_store_str(NEV_SET_DEVICE_ID);
@@ -389,8 +420,32 @@ void nev_bridge_stop(void) {
     s_bridge.state = NEV_BRIDGE_OFFLINE;
 }
 
+/* Forwards captured audio. Chunks arrive as bus events because audio_service is
+ * L2 and this is L3: it publishes, and the bridge is simply a subscriber. */
+static void drain_audio(void) {
+    if (!s_bridge.sub) return;
+
+    nev_event_t ev;
+    while (nev_bus_recv(s_bridge.sub, &ev, NEV_NO_WAIT)) {
+        if (ev.type == NEV_EVT_AUDIO_CHUNK && (ev.flags & NEV_EVF_BLOB)) {
+            /* Dropped rather than queued when the link is down: audio that
+             * cannot be sent now is worth less every second it waits, and the
+             * sequence number tells the daemon what is missing. */
+            if (s_bridge.state == NEV_BRIDGE_READY) {
+                s_audio_kind = ev.p.audio.kind;
+                const int16_t *pcm = (const int16_t *)nev_blob_data(ev.p.audio.handle);
+                (void)nev_bridge_send_audio(ev.p.audio.session, ev.p.audio.seq,
+                                            ev.p.audio.final != 0, pcm, ev.p.audio.samples);
+            }
+        }
+        if (ev.flags & NEV_EVF_BLOB) nev_blob_release(ev.p.blob.handle);
+    }
+}
+
 void nev_bridge_poll(void) {
     if (!s_bridge.started) return;
+
+    drain_audio();
 
     if (!nev_net_is_up()) {
         if (s_bridge.state != NEV_BRIDGE_OFFLINE) disconnect("the network went away");
@@ -528,6 +583,18 @@ bool nev_bridge_ask(uint32_t turn, const char *text, const char *app) {
     return send_payload(s_bridge.scratch, len);
 }
 
+bool nev_bridge_mark(uint32_t session, float at_seconds) {
+    if (s_bridge.state != NEV_BRIDGE_READY) return false;
+
+    nev_msg_capture_marker_t marker = {.session = session, .at_seconds = at_seconds};
+    size_t len = 0;
+    if (nev_proto_encode_capture_marker(&marker, s_bridge.scratch, sizeof(s_bridge.scratch),
+                                        &len) != NEV_OK) {
+        return false;
+    }
+    return send_payload(s_bridge.scratch, len);
+}
+
 bool nev_bridge_send_audio(uint32_t session, uint32_t seq, bool final, const int16_t *pcm,
                            size_t samples) {
     if (s_bridge.state != NEV_BRIDGE_READY) return false;
@@ -551,6 +618,7 @@ bool nev_bridge_send_audio(uint32_t session, uint32_t seq, bool final, const int
     chunk.final = final;
     chunk.pcm = (const uint8_t *)pcm;
     chunk.pcm_len = samples * sizeof(int16_t);
+    chunk.kind = s_audio_kind;
 
     size_t len = 0;
     if (nev_proto_encode_audio_chunk(&chunk, s_bridge.scratch, sizeof(s_bridge.scratch), &len) !=

@@ -28,6 +28,7 @@
 #include "nev_port/nev_time.h"
 #include "nev_services/display_service.h"
 #include "nev_services/input_service.h"
+#include "nev_services/audio_service.h"
 #include "nev_services/power_service.h"
 #include "lvgl.h"
 #include <stdio.h>
@@ -239,17 +240,21 @@ typedef struct {
     bool bridge;
     /* -1 means "leave it on mains", which is what a simulator really is. */
     int32_t battery;
-    /* One scripted tap, so a screenshot can show what a button does rather
-     * than only what a screen looks like before anyone touches it. */
-    int32_t tap_x, tap_y;
-    uint32_t tap_frame;
+    /* Scripted taps, so a capture can show what a sequence of buttons does
+     * rather than only what a screen looks like before anyone touches it.
+     * Four is enough for the flows worth capturing; more would be a script. */
+    struct {
+        int32_t x, y;
+        uint32_t frame;
+    } taps[4];
+    size_t tap_count;
 } options_t;
 
 static void usage(const char *argv0) {
     fprintf(stderr,
             "usage: %s [--persona] [--boot] [--script] [--mood NAME]\n"
             "          [--app ID] [--settings PATH] [--play]\n"
-            "          [--bridge] [--battery PCT] [--tap X,Y,FRAME]\n"
+            "          [--bridge] [--battery PCT] [--tap X,Y,FRAME]...\n"
             "          [--frames N] [--shot PATH.ppm]\n"
             "          [--strip DIR] [--strip-every N]\n",
             argv0);
@@ -283,9 +288,11 @@ static options_t parse_args(int argc, char **argv) {
         else if (!strcmp(a, "--tap") && i + 1 < argc) {
             unsigned x = 0, y = 0, f = 0;
             if (sscanf(argv[++i], "%u,%u,%u", &x, &y, &f) != 3) usage(argv[0]);
-            o.tap_x = (int32_t)x;
-            o.tap_y = (int32_t)y;
-            o.tap_frame = f;
+            if (o.tap_count >= sizeof(o.taps) / sizeof(o.taps[0])) usage(argv[0]);
+            o.taps[o.tap_count].x = (int32_t)x;
+            o.taps[o.tap_count].y = (int32_t)y;
+            o.taps[o.tap_count].frame = f;
+            o.tap_count++;
         } else if (!strcmp(a, "--app") && i + 1 < argc)
             o.app_id = argv[++i];
         else if (!strcmp(a, "--settings") && i + 1 < argc)
@@ -317,6 +324,7 @@ int main(int argc, char **argv) {
         NEV_LOGI(TAG, "pretending to run on a %d%% battery", (int)opt.battery);
     }
     if (power_service_init(nev_now_ms()) != NEV_OK) return 1;
+    if (audio_service_init() != NEV_OK) return 1;
 
     /*
      * The simulator knows what time it is; the device does not until the daemon
@@ -381,18 +389,21 @@ int main(int argc, char **argv) {
 
         if (opt.script) run_script(now_ms, &script_cursor);
         if (opt.play) drive_play(frame_no++);
-        if (opt.tap_frame != 0) {
+        for (size_t t = 0; t < opt.tap_count; t++) {
             /* Down and up on consecutive frames: LVGL needs to see both edges
              * to call it a click. */
-            if (frame_no == opt.tap_frame) {
-                nev_board_sim_inject_touch((int16_t)opt.tap_x, (int16_t)opt.tap_y, NEV_TOUCH_DOWN);
-            } else if (frame_no == opt.tap_frame + 1) {
-                nev_board_sim_inject_touch((int16_t)opt.tap_x, (int16_t)opt.tap_y, NEV_TOUCH_UP);
+            if (frame_no == opt.taps[t].frame) {
+                nev_board_sim_inject_touch((int16_t)opt.taps[t].x, (int16_t)opt.taps[t].y,
+                                           NEV_TOUCH_DOWN);
+            } else if (frame_no == opt.taps[t].frame + 1) {
+                nev_board_sim_inject_touch((int16_t)opt.taps[t].x, (int16_t)opt.taps[t].y,
+                                           NEV_TOUCH_UP);
             }
-            if (!opt.play) frame_no++;
         }
+        if (opt.tap_count > 0 && !opt.play) frame_no++;
         input_service_poll(now_ms);
         power_service_tick(now_ms);
+        audio_service_poll(now_ms);
         /* On the device this runs on the network task, not here. In the
          * simulator there is one thread, and the bridge never blocks, so the
          * frame budget survives it. */
@@ -424,6 +435,10 @@ int main(int argc, char **argv) {
         display_stats_t st;
         display_service_stats(&st);
 
+        /* Warns about a buffer held far longer than any consumer should need,
+         * which names the leak while the run is still going. */
+        if (st.frames % 60 == 0) nev_blob_check_stale(2000);
+
         if (opt.strip_dir && st.frames % opt.strip_every == 0) {
             char path[512];
             snprintf(path, sizeof(path), "%s/f%03u.ppm", opt.strip_dir, (unsigned)strip_index++);
@@ -444,6 +459,7 @@ int main(int argc, char **argv) {
         rc = 1;
     }
 
+    audio_service_deinit();
     power_service_deinit();
     if (opt.bridge) nev_bridge_stop();
     if (opt.persona) nev_persona_deinit();
@@ -453,6 +469,21 @@ int main(int argc, char **argv) {
     display_service_deinit();
     nev_board_deinit();
     nev_bus_deinit();
+
+    /*
+     * A leaked blob is invisible until the pool runs dry, and then it surfaces
+     * as audio being dropped two subsystems away from the mistake. The device
+     * target has swept for held buffers since M1; the simulator did not, which
+     * is why a missing release in the publish path survived a milestone of
+     * testing on the host. CI runs headless, so this makes it a failed build.
+     */
+    if (!nev_blob_all_free()) {
+        nev_blob_stats_t blobs;
+        nev_blob_stats(&blobs);
+        NEV_LOGE(TAG, "blobs leaked at shutdown: %u small, %u medium, %u large",
+                 (unsigned)blobs.in_use[0], (unsigned)blobs.in_use[1], (unsigned)blobs.in_use[2]);
+        rc = 1;
+    }
     nev_blob_pool_deinit();
     return rc;
 }

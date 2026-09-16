@@ -15,6 +15,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "nev_port/nev_time.h"
+
 #define TAG "board"
 
 static uint16_t *s_fb;
@@ -148,6 +150,54 @@ void nev_board_power_state(nev_power_state_t *out) {
                                  (NEV_BATT_FULL_MV - NEV_BATT_EMPTY_MV) * s_batt_percent / 100);
     out->charging = s_batt_charging;
     out->battery_present = true;
+}
+
+/* ------------------------------------------------------------------ audio */
+
+/*
+ * The simulator has no microphone, so it produces silence — but at the right
+ * rate.
+ *
+ * Rate is the part that matters. Everything above this reads "how much audio
+ * has arrived" and paces itself by it: the chunker, the wire, the daemon's
+ * segment timer. Handing back an unlimited supply of samples would let a
+ * one-second meeting transcribe an hour, and handing back none would make the
+ * whole path untestable without hardware.
+ *
+ * Silence rather than a tone because the mock transcriber ignores the samples
+ * entirely, and a buzzing simulator would be a thing to switch off.
+ */
+static bool s_audio_running;
+static uint64_t s_audio_started_us;
+static uint64_t s_audio_delivered;
+
+nev_err_t nev_board_audio_start(void) {
+    s_audio_running = true;
+    s_audio_started_us = nev_now_us();
+    s_audio_delivered = 0;
+    return NEV_OK;
+}
+
+void nev_board_audio_stop(void) {
+    s_audio_running = false;
+}
+
+bool nev_board_audio_is_running(void) {
+    return s_audio_running;
+}
+
+size_t nev_board_audio_read(int16_t *out, size_t max_samples) {
+    if (!s_audio_running || !out || max_samples == 0) return 0;
+
+    const uint64_t elapsed_us = nev_now_us() - s_audio_started_us;
+    const uint64_t owed = elapsed_us * NEV_AUDIO_SAMPLE_RATE / 1000000u;
+    if (owed <= s_audio_delivered) return 0;
+
+    size_t n = (size_t)(owed - s_audio_delivered);
+    if (n > max_samples) n = max_samples;
+    memset(out, 0, n * sizeof(int16_t));
+    s_audio_delivered += n;
+    return n;
 }
 
 void nev_board_tick(void) {

@@ -13,6 +13,7 @@ set(NEV_SERVICES_SRCS
   ${NEV_SERVICES_DIR}/src/display_service.c
   ${NEV_SERVICES_DIR}/src/input_service.c
   ${NEV_SERVICES_DIR}/src/power_service.c
+  ${NEV_SERVICES_DIR}/src/audio_service.c
 )
 
 set(NEV_SERVICES_TEST_SRCS

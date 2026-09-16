@@ -11,6 +11,8 @@
 #include "nev_kernel/nev_events.h"
 #include "nev_port/nev_types.h"
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -67,6 +69,29 @@ typedef struct {
     uint32_t len;
 } nev_p_blob_t;
 
+/*
+ * A chunk of captured audio.
+ *
+ * `handle` is first, and must stay first: the bus retains and releases blobs
+ * through p.blob.handle, and this works only because the two structs share that
+ * initial member. The assert below pins it — a field inserted above it would
+ * otherwise leak every audio buffer the microphone ever produced.
+ */
+typedef struct {
+    uint16_t handle;
+    uint16_t seq;     /* within this capture                         */
+    uint32_t session; /* groups chunks into one utterance or meeting */
+    uint16_t samples;
+    uint8_t kind;  /* nev_audio_kind_t                            */
+    uint8_t final; /* last chunk of this capture                  */
+} nev_p_audio_t;
+
+/* What a capture is for. Matches audio_chunk.kind on the wire. */
+typedef enum {
+    NEV_AUDIO_KIND_NOTE = 0,
+    NEV_AUDIO_KIND_TRANSCRIPT = 1,
+} nev_audio_kind_t;
+
 typedef struct {
     uint32_t frame;
     uint16_t render_us;
@@ -111,6 +136,7 @@ typedef union {
     nev_p_gesture_t gesture;
     nev_p_mood_t mood;
     nev_p_blob_t blob;
+    nev_p_audio_t audio;
     nev_p_frame_t frame;
     nev_p_battery_t battery;
     nev_p_overflow_t overflow;
@@ -140,6 +166,9 @@ NEV_PAYLOAD_FITS(nev_p_button_t);
 NEV_PAYLOAD_FITS(nev_p_gesture_t);
 NEV_PAYLOAD_FITS(nev_p_mood_t);
 NEV_PAYLOAD_FITS(nev_p_blob_t);
+NEV_PAYLOAD_FITS(nev_p_audio_t);
+_Static_assert(offsetof(nev_p_audio_t, handle) == offsetof(nev_p_blob_t, handle),
+               "the bus refcounts blobs through p.blob.handle; audio must share that offset");
 NEV_PAYLOAD_FITS(nev_p_frame_t);
 NEV_PAYLOAD_FITS(nev_p_battery_t);
 NEV_PAYLOAD_FITS(nev_p_overflow_t);

@@ -63,6 +63,24 @@ uint8_t nev_board_buttons_read(void);        /* NEV_BTN_* bitmask, debounced  */
 bool nev_board_imu_read(nev_imu_sample_t *out);
 void nev_board_power_state(nev_power_state_t *out);
 
+/* ------------------------------------------------------------------ audio */
+
+/*
+ * Microphone capture, 16 kHz mono signed 16-bit — the format the daemon's
+ * transcriber wants, converted here rather than anywhere further up.
+ *
+ * Reading is pull-based and never blocks: `nev_board_audio_read` returns what
+ * the driver has right now, which on the device is whatever I2S has DMA'd since
+ * the last call. A capture that nobody reads from drops its oldest samples
+ * rather than stalling the audio task.
+ */
+nev_err_t nev_board_audio_start(void);
+void nev_board_audio_stop(void);
+bool nev_board_audio_is_running(void);
+
+/* Returns the number of samples written, 0 when none are ready yet. */
+size_t nev_board_audio_read(int16_t *out, size_t max_samples);
+
 /*
  * Called once per frame from the render task. On the simulator this pumps the
  * window's event queue; on the device it is a no-op. Having it in the shared
