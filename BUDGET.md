@@ -313,6 +313,27 @@ Audio capture is four buffer copies a second; it does not show up.
 
 ---
 
+## OS complete — the last services
+
+| Item | Bytes | Note |
+|---|---|---|
+| Sound slice buffer | 1,200 | 600 samples, one frame at 30 fps |
+| Sound core | 24 | the synthesiser's whole state |
+| Net core | 40 | the Wi-Fi state machine |
+| OTA core | 152 | mostly the streaming SHA-256 |
+| **Committed total** | **~415 KB** | of 512 KB |
+
+Six sound cues cost 1.2 KB of RAM and nothing in flash. As WAV assets at
+16 kHz they would have been roughly 55 KB of the assets partition and a
+decoder, for sounds that are two sine tones and an envelope.
+
+The remaining internal SRAM — about 97 KB — is what the drivers get: LCD and
+I2S DMA descriptors, the Wi-Fi stack's own buffers, and task stacks. The Wi-Fi
+stack is the large unknown, at somewhere between 30 and 50 KB depending on
+configuration, which is why nothing above it has been allowed to sprawl.
+
+---
+
 ## Method
 
 Internal and PSRAM figures come from `sizeof` and from the allocation sites,

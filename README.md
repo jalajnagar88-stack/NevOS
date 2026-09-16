@@ -22,8 +22,14 @@ buy and [ARCHITECTURE.md](ARCHITECTURE.md) for how it all fits.
 ```bash
 ./tools/build.sh sim                  # the shell
 ./tools/build.sh sim -- --app snake   # straight into a game
+./tools/build.sh sim -- --app focus   # the timer
 ./tools/build.sh sim -- --persona     # the face
+./tools/build.sh sim -- --bridge      # find a daemon and pair with it
 ```
+
+Twelve apps: five original games, a clock, a focus timer, settings, the
+pairing screen, and three that use the companion daemon — ask, notes and
+meeting mode.
 
 ---
 
