@@ -417,6 +417,8 @@ Each of these has an ADR in [`docs/adr/`](docs/adr/):
 | 0010 | Eyes-only face | character face; abstract orb |
 | 0011 | Game rules split from rendering | rules inside the renderer, smoke-tested |
 | 0012 | Dependency-free generated codec, 3 implementations | a CBOR crate on the Rust side |
+| 0013 | Local-only agent; no cloud backend written | hosted model behind an API key on the daemon |
+| 0014 | Device link and control API on separate listeners | one server, both on the LAN |
 
 ---
 
@@ -451,6 +453,7 @@ nevos/
 │   ├── app-lifecycle.md         (M3)
 │   ├── adding-an-app.md         (M3) — one page, start to finish
 │   ├── protocol.md              (M6)
+│   ├── daemon.md                (M6)
 │   └── adr/0001..0007-*.md      decisions and what they cost
 │
 ├── targets/                     the three build roots

@@ -151,6 +151,33 @@ impl Transcriber for WhisperCli {
     }
 }
 
+// --------------------------------------------------------------- unavailable
+
+/// What the daemon uses when no transcriber is configured.
+///
+/// The alternative — refusing to start — would take the notes app, the agent,
+/// pairing and the games offline because one optional binary is missing. This
+/// way the device works, and the one thing that does not work says so.
+pub struct Unavailable;
+
+#[async_trait]
+impl Transcriber for Unavailable {
+    fn name(&self) -> &str {
+        "none (not configured)"
+    }
+
+    fn is_local(&self) -> bool {
+        // Nothing is sent anywhere, because nothing happens.
+        true
+    }
+
+    async fn transcribe(&self, _pcm: &[i16], _sample_rate: u32) -> Result<Transcript> {
+        Err(anyhow!(
+            "no transcriber is configured: set NEVOS_WHISPER_BIN and NEVOS_WHISPER_MODEL"
+        ))
+    }
+}
+
 // ---------------------------------------------------------------------- mock
 
 /// Used by tests, and by the daemon when no transcriber is configured — so the
@@ -242,5 +269,13 @@ mod tests {
         let w = WhisperCli::new("/nonexistent/whisper", "/nonexistent/model.bin");
         assert!(w.check().is_err());
         assert!(w.is_local());
+    }
+
+    #[tokio::test]
+    async fn an_unconfigured_transcriber_fails_loudly_rather_than_returning_silence() {
+        // An empty string here would look like "you said nothing", and the user
+        // would try again and again into a microphone that is working fine.
+        let err = Unavailable.transcribe(&[1, 2, 3], 16_000).await.unwrap_err();
+        assert!(err.to_string().contains("NEVOS_WHISPER_BIN"), "{err}");
     }
 }

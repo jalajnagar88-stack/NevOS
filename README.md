@@ -4,8 +4,10 @@ An embedded operating system for a desktop companion robot: an ESP32-S3 with a
 480x480 touch panel, a face with a personality, five original arcade games,
 focus and capture tools, and a local-first agent daemon running on your PC.
 
-**Status: M4.** Kernel, persona, shell and five original games, all running on
-the simulator. See [ARCHITECTURE.md](ARCHITECTURE.md).
+**Status: M6 in progress.** Kernel, persona, shell and five original games all
+run on the simulator; the bridge protocol and the companion daemon are built and
+tested. The device half of the bridge and hardware bring-up are next. See
+[ARCHITECTURE.md](ARCHITECTURE.md).
 
 ```bash
 ./tools/build.sh sim                  # the shell
@@ -29,6 +31,15 @@ sudo apt-get install -y cmake ninja-build libsdl2-dev clang-format
 ./tools/build.sh test       # host unit tests, no hardware
 ./tools/build.sh check      # what CI runs
 ```
+
+The companion daemon, which does the talking and the listening, runs on your own
+computer and needs nothing installed to try:
+
+```bash
+cd companion && cargo run -p nevosd -- --mock
+```
+
+No account, no API key, no cloud service — see [docs/daemon.md](docs/daemon.md).
 
 No ESP-IDF install is needed for any of the above. The simulator and the test
 suite build with cmake, ninja and SDL2 alone — that is the point of the

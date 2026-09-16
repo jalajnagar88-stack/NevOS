@@ -14,3 +14,22 @@ anyhow.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+
+# The device link and the tray's control API are both HTTP, on two separate
+# listeners; axum gives us the WebSocket upgrade and the JSON routes with one
+# dependency tree rather than two.
+axum = { version = "0.8", features = ["ws"] }
+# Pure-Rust mDNS. The alternative is talking to the platform's daemon, which
+# means Bonjour on macOS and Avahi on Linux and neither on Windows.
+mdns-sd = "0.13"
+getrandom = "0.3"
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+
+[dev-dependencies]
+# A WebSocket client for the end-to-end test. The daemon itself is a server and
+# does not need one; this is the device's half, standing in for the firmware.
+tokio-tungstenite = "0.29"
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
