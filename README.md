@@ -4,12 +4,20 @@ An embedded operating system for a desktop companion robot: an ESP32-S3 with a
 480x480 touch panel, a face with a personality, five original arcade games,
 focus and capture tools, and a local-first agent daemon running on your PC.
 
-**Status: M7 on the simulator.** Kernel, persona, shell, five original games, the companion
-daemon and the link between them, plus power management, meeting mode and
-factory reset. The simulator discovers a real daemon on the network, pairs by
-showing a code, holds a conversation, and records a meeting the daemon
-transcribes while it runs — using the same code the device will run. Hardware
-bring-up (M5) is what is left. See [ARCHITECTURE.md](ARCHITECTURE.md).
+**Status: everything that does not need hardware is built and tested.**
+Kernel, persona, shell, five original games, the companion daemon and the link
+between them, power management, meeting mode, factory reset, OTA verification
+and the Wi-Fi state machine.
+
+The simulator finds a real daemon on your network, pairs by showing a code you
+type on the computer, holds a conversation with a local model, and records a
+meeting the daemon transcribes while it is still running — using the same code
+the device will run, because there is no device-specific code in any of those
+paths.
+
+What is left is hardware bring-up: the panel init sequence, touch, I2S and
+`esp_wifi`. See [docs/choosing-a-board.md](docs/choosing-a-board.md) for what to
+buy and [ARCHITECTURE.md](ARCHITECTURE.md) for how it all fits.
 
 ```bash
 ./tools/build.sh sim                  # the shell

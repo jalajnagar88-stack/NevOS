@@ -441,13 +441,23 @@ Each of these has an ADR in [`docs/adr/`](docs/adr/):
 
 | | Deliverable | Runs on |
 |---|---|---|
-| M1 | skeleton, dual-target build, LVGL window, event bus + tests | simulator |
-| M2 | persona: 8 moods, tweened transitions, idle behaviors | simulator |
-| M3 | shell: appkit, home, status bar, UI kit, settings persistence | simulator |
-| M4 | game engine + five games, high scores, sound | simulator |
-| M5 | hardware bring-up: display, touch, audio, IMU, Wi-Fi, OTA | device |
-| M6 | bridge schema + codegen, WebSocket, pairing, Rust daemon, `notes` + `agent` | both |
-| M7 | meeting mode, power management, boot animation, release build, docs | both |
+| | Deliverable | Runs on | State |
+|---|---|---|---|
+| M1 | skeleton, dual-target build, LVGL window, event bus + tests | simulator | done |
+| M2 | persona: 8 moods, tweened transitions, idle behaviors | simulator | done |
+| M3 | shell: appkit, home, status bar, UI kit, settings persistence | simulator | done |
+| M4 | game engine + five games, high scores, sound | simulator | done |
+| M6 | bridge schema + codegen, WebSocket, pairing, Rust daemon, `notes` + `agent` | both | done |
+| M7 | meeting mode, power management, boot animation, release build, docs | both | done |
+| M5 | hardware bring-up: display, touch, audio, IMU, Wi-Fi, OTA | device | waiting on a board |
+
+M6 and M7 were built before M5 because neither needs hardware and both are
+where the product lives. What M5 still owes is the part that genuinely cannot
+be written without the panel in hand: its init sequence, the touch controller,
+I2S, and `esp_wifi` underneath the state machine that is already tested. The
+policy above each of those — when to retry a connection, whether an update is
+worth taking, when the screen sleeps — is written and tested on the host, which
+is the whole point of the `nev_port` layer.
 
 M1–M4 require no hardware. M6 is where the differentiation lives and is where
 the engineering effort should concentrate.
@@ -470,6 +480,7 @@ nevos/
 │   ├── protocol.md              (M6)
 │   ├── daemon.md                (M6)
 │   ├── flashing.md              (M7)
+│   ├── choosing-a-board.md      (M7)
 │   └── adr/0001..0007-*.md      decisions and what they cost
 │
 ├── targets/                     the three build roots
