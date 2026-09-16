@@ -22,9 +22,25 @@ extern "C" {
 
 /* ------------------------------------------------------------- payload types */
 
+/*
+ * The touch action as it travels on the bus.
+ *
+ * Deliberately not the board's nev_touch_action_t: that lives at L0, which apps
+ * may not include, and the event vocabulary is a contract that should outlive
+ * any particular driver's enum. input_service maps between them with an
+ * explicit switch, so a divergence is a compile error rather than a silently
+ * renumbered field.
+ */
+typedef enum {
+    NEV_TOUCH_ACT_NONE = 0,
+    NEV_TOUCH_ACT_DOWN,
+    NEV_TOUCH_ACT_MOVE,
+    NEV_TOUCH_ACT_UP,
+} nev_touch_action_code_t;
+
 typedef struct {
     int16_t x, y;
-    uint8_t action; /* nev_touch_action_t */
+    uint8_t action; /* nev_touch_action_code_t */
     uint8_t finger;
 } nev_p_touch_t;
 

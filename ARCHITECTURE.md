@@ -1,8 +1,8 @@
 # NEVOS Architecture
 
-> Status: **M1 complete.** L-1, L1, L0 (simulator) and a minimal L2 display
-> service are implemented and tested; the rest of this document is the plan they
-> are built to serve.
+> Status: **M1–M4 complete.** Kernel, persona, shell and the five games are
+> implemented and tested on the simulator. M5 onward — hardware bring-up, the
+> bridge and the daemon — is still the plan this document serves.
 > Every decision here is meant to survive a year of building on it. Where a
 > decision is reversible, this document says so. Where it is not, it says that too.
 
@@ -414,6 +414,8 @@ Each of these has an ADR in [`docs/adr/`](docs/adr/):
 | 0007 | Schema-generated bridge codec | hand-written C and Rust structs |
 | 0008 | Device fully useful offline | daemon assumed present |
 | 0009 | Push-to-talk through M6 | on-device esp-sr wake word |
+| 0010 | Eyes-only face | character face; abstract orb |
+| 0011 | Game rules split from rendering | rules inside the renderer, smoke-tested |
 
 ---
 

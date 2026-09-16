@@ -96,6 +96,18 @@ nev_err_t nev_game_begin(nev_game_t *g, lv_obj_t *root, const nev_game_def_t *de
     lv_obj_set_style_radius(g->field, NEV_RADIUS_MD, LV_PART_MAIN);
     lv_obj_set_style_clip_corner(g->field, true, LV_PART_MAIN);
     lv_obj_remove_flag(g->field, LV_OBJ_FLAG_SCROLLABLE);
+    /*
+     * A swipe inside the playfield is game input, not navigation.
+     *
+     * LVGL sets LV_OBJ_FLAG_GESTURE_BUBBLE on every object with a parent, so
+     * without this a gesture reaches the shell's content container and is read
+     * as swipe-right-to-go-home. Dragging Breakout's paddle to the right would
+     * quit the game. Cleared here rather than in each game, because it is true
+     * of every playfield.
+     *
+     * Leaving a game is button B, or a swipe in the margin outside the field.
+     */
+    lv_obj_remove_flag(g->field, LV_OBJ_FLAG_GESTURE_BUBBLE);
 
     g->hud_score = nev_ui_label(root, "0", NEV_FONT_TITLE, NEV_COL_INK);
     lv_obj_align(g->hud_score, LV_ALIGN_TOP_LEFT, NEV_SP_5, 0);

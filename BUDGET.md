@@ -173,6 +173,50 @@ device build.
 
 ---
 
+## M4 — game engine and five games
+
+### Frame time
+
+| Screen | Average | Worst | Tick rate | Measured where |
+|---|---|---|---|---|
+| Shell (home grid) | 9 us | 831 us | — | **host x86, headless** |
+| Snake | 70 us | 1,893 us | 60 Hz | **host x86, headless** |
+| Match | 146 us | 2,110 us | 60 Hz | **host x86, headless** |
+| Runner | 177 us | 1,348 us | 120 Hz | **host x86, headless** |
+| Reflex | 227 us | 1,768 us | 120 Hz | **host x86, headless** |
+| Persona face | 1,084 us | 2,392 us | — | **host x86, headless** |
+| **Breakout** | **934 us** | 1,707 us | 120 Hz | **host x86, headless** |
+
+Breakout is the expensive game, by roughly five times. Two causes: a 120 Hz
+fixed tick (a fast ball against a thin paddle can tunnel through both at 60 Hz),
+and 40 brick objects whose styles are touched every redraw. If it does not
+survive the device, the cheap fix is to stop restyling unchanged bricks — only
+the one that was hit changes — which is a few lines and should recover most of
+it.
+
+Breakout and the persona face together would be about 2 ms per frame on the
+host. That is comfortable at 30 fps here and is the pair to measure first on
+real hardware.
+
+### Memory
+
+| Item | Bytes | Note |
+|---|---|---|
+| Particle pool | ~32 LVGL objects | preallocated per game, reused round-robin |
+| Snake segments | 72 objects | one per possible body segment |
+| Breakout bricks | 40 objects | plus 4 powerups and a ball |
+| Match tiles | 49 objects | the largest single board |
+| Game rule state | < 1 KB each | plain structs, no allocation |
+
+All of it comes from `LV_MEM_SIZE` (256 KB) rather than static memory, and only
+one game is ever live plus at most two suspended (`NEV_SHELL_MAX_LIVE`). Match
+is the heaviest board at 49 tiles.
+
+No game allocates during play. Particles are drawn from a fixed pool and a burst
+during a burst steals the oldest rather than allocating.
+
+---
+
 ## Method
 
 Internal and PSRAM figures come from `sizeof` and from the allocation sites,

@@ -4,7 +4,14 @@ An embedded operating system for a desktop companion robot: an ESP32-S3 with a
 480x480 touch panel, a face with a personality, five original arcade games,
 focus and capture tools, and a local-first agent daemon running on your PC.
 
-**Status: M1.** Kernel, event bus and simulator. See [ARCHITECTURE.md](ARCHITECTURE.md).
+**Status: M4.** Kernel, persona, shell and five original games, all running on
+the simulator. See [ARCHITECTURE.md](ARCHITECTURE.md).
+
+```bash
+./tools/build.sh sim                  # the shell
+./tools/build.sh sim -- --app snake   # straight into a game
+./tools/build.sh sim -- --persona     # the face
+```
 
 ---
 

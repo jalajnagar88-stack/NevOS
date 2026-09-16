@@ -66,6 +66,22 @@ static void publish_button(uint16_t type, uint8_t id) {
  * neither of them owns a widget tree to hang a callback on. Published on
  * transitions only — a held finger is one DOWN, not thirty a second.
  */
+/* Explicit rather than a cast: if either enum is renumbered, this stops
+ * compiling instead of quietly sending the wrong code. */
+static uint8_t to_event_action(uint8_t board_action) {
+    switch ((nev_touch_action_t)board_action) {
+        case NEV_TOUCH_DOWN:
+            return NEV_TOUCH_ACT_DOWN;
+        case NEV_TOUCH_MOVE:
+            return NEV_TOUCH_ACT_MOVE;
+        case NEV_TOUCH_UP:
+            return NEV_TOUCH_ACT_UP;
+        case NEV_TOUCH_NONE:
+            break;
+    }
+    return NEV_TOUCH_ACT_NONE;
+}
+
 static void publish_touch(const nev_touch_t *t) {
     nev_event_t ev = nev_event_make(NEV_EVT_INPUT_TOUCH, NEV_SRC_INPUT);
     /* nev_touch_t and nev_p_touch_t are deliberately separate types even though
@@ -74,7 +90,7 @@ static void publish_touch(const nev_touch_t *t) {
      * bus change. Copied field by field so a divergence is a compile error. */
     ev.p.touch.x = t->x;
     ev.p.touch.y = t->y;
-    ev.p.touch.action = t->action;
+    ev.p.touch.action = to_event_action(t->action);
     ev.p.touch.finger = t->finger;
     (void)nev_bus_publish(&ev);
 }

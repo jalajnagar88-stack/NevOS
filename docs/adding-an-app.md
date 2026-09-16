@@ -98,6 +98,26 @@ Only `on_launch` is required.
 the container, and LVGL takes the children with it. Release only what the shell
 cannot see.
 
+## If your app has rules, put them in a core
+
+Anything with interesting behaviour — game rules, a state machine, a scoring
+system — belongs in a `_core.c` with **no LVGL, no clock of its own, and
+randomness injected as a callback**, exactly as the games and the persona do.
+
+The payoff is not tidiness. It is that the behaviour becomes assertable without
+a display: `./tools/build.sh test` covers Snake's tail-cell rule and Breakout's
+speed conservation in milliseconds, and neither is reachable by clicking around
+in the simulator. See ADR 0011.
+
+```c
+/* rules: no LVGL, no clock, no global RNG */
+bool  thing_core_step(thing_core_t *t, float dt);
+void  thing_core_seed(thing_core_t *t, uint32_t (*rand_fn)(void *, uint32_t), void *ctx);
+```
+
+Add the core to `NEV_GAME_RULE_SRCS` in `apps/sources.cmake` and its test to
+`NEV_GAME_RULE_TEST_SRCS`; the test build links it without a UI toolkit.
+
 ## Persisting something
 
 Add a row to `NEV_SETTING_LIST` in `nev_kernel/nev_store.h` with a type, a

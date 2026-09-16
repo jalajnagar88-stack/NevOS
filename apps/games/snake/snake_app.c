@@ -181,13 +181,7 @@ static nev_err_t snake_launch(lv_obj_t *root) {
     lv_obj_add_flag(s_view.food, LV_OBJ_FLAG_HIDDEN);
 
     lv_obj_add_flag(field, LV_OBJ_FLAG_CLICKABLE);
-    /*
-     * LVGL sets LV_OBJ_FLAG_GESTURE_BUBBLE on every object that has a parent
-     * (lv_obj.c: `if(parent) obj->flags |= LV_OBJ_FLAG_GESTURE_BUBBLE`), so a
-     * gesture is delivered to the topmost ancestor rather than to the object
-     * that was touched. A handler attached here never fires until it is cleared.
-     */
-    lv_obj_remove_flag(field, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    /* The engine has already cleared GESTURE_BUBBLE on the field. */
     lv_obj_add_event_cb(field, field_gesture_cb, LV_EVENT_GESTURE, &s_view);
     return NEV_OK;
 }
