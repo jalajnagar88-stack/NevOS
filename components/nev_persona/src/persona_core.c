@@ -91,6 +91,28 @@ void nev_persona_core_init(nev_persona_core_t *c, uint32_t now_ms, uint32_t seed
     schedule_gaze(c, now_ms);
 }
 
+void nev_persona_core_wake(nev_persona_core_t *c, uint32_t ms, uint32_t now_ms) {
+    if (!c || ms == 0) return;
+
+    /*
+     * Shut means eye_open at zero and lids level — not the sleepy preset, which
+     * is a mood with a downward cast to everything and would read as the device
+     * waking up unhappy about it.
+     */
+    c->from = *nev_face_preset(NEV_MOOD_IDLE);
+    c->from.eye_open = 0.0f;
+    c->from.brow_raise = 0.0f;
+    c->to = *nev_face_preset(c->rest_mood);
+    c->current = c->from;
+
+    c->tween_start_ms = now_ms;
+    c->tween_ms = ms;
+
+    /* No blink for a moment: opening the eyes and immediately shutting them
+     * again reads as a flicker rather than as waking up. */
+    c->next_blink_ms = now_ms + ms + NEV_BLINK_MIN_MS;
+}
+
 void nev_persona_core_set_mood(nev_persona_core_t *c, nev_mood_t mood, uint8_t intensity,
                                uint32_t hold_ms, uint32_t now_ms) {
     if (!c || mood < 0 || mood >= NEV_MOOD_COUNT) return;

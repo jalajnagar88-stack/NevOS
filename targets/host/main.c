@@ -132,6 +132,9 @@ static void build_persona_screen(nev_mood_t start_mood) {
     lv_obj_remove_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
 
     NEV_CHECK(nev_persona_init(screen) == NEV_OK);
+    /* The first thing anyone sees the device do. 700 ms is long enough to be
+     * noticed and short enough not to be in the way. */
+    nev_persona_wake(700);
     nev_persona_set_mood(start_mood, 255, 0);
 
     s_mood_label = lv_label_create(screen);

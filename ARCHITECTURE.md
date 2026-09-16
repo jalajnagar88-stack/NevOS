@@ -432,6 +432,8 @@ Each of these has an ADR in [`docs/adr/`](docs/adr/):
 | 0012 | Dependency-free generated codec, 3 implementations | a CBOR crate on the Rust side |
 | 0013 | Local-only agent; no cloud backend written | hosted model behind an API key on the daemon |
 | 0014 | Device link and control API on separate listeners | one server, both on the LAN |
+| 0015 | Charging dims but never sleeps; waking tap is swallowed | one timeout, screen off, touch delivered |
+| 0016 | Notes and meetings are two audio paths | one path with a bigger buffer |
 
 ---
 
@@ -467,6 +469,7 @@ nevos/
 │   ├── adding-an-app.md         (M3) — one page, start to finish
 │   ├── protocol.md              (M6)
 │   ├── daemon.md                (M6)
+│   ├── flashing.md              (M7)
 │   └── adr/0001..0007-*.md      decisions and what they cost
 │
 ├── targets/                     the three build roots

@@ -11,6 +11,7 @@
 #   ./tools/build.sh asan        every screen under AddressSanitizer
 #   ./tools/build.sh check       lint + format + test + asan + both host builds
 #   ./tools/build.sh device      ESP32-S3 firmware (needs ESP-IDF on PATH)
+#   ./tools/build.sh release     the same, with the release overlay applied
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -127,6 +128,18 @@ case "${1:-check}" in
     idf.py -C targets/esp32s3 "${@:2}"
     ;;
 
+  release)
+    if ! command -v idf.py >/dev/null 2>&1; then
+      echo "ESP-IDF not on PATH. Run: . \$HOME/esp/esp-idf/export.sh" >&2
+      exit 1
+    fi
+    need_submodules
+    # Both files, in order: the release overlay wins where they disagree.
+    idf.py -C targets/esp32s3 \
+      -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.release" \
+      -D NEVOS_RELEASE=1 "${@:2}"
+    ;;
+
   check)
     "$0" lint
     "$0" format-check
@@ -146,7 +159,7 @@ case "${1:-check}" in
     ;;
 
   *)
-    sed -n '2,12p' "$0"
+    sed -n '2,14p' "$0"
     exit 2
     ;;
 esac

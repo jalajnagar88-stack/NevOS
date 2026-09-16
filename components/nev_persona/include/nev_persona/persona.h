@@ -47,6 +47,9 @@ void nev_persona_tick(uint32_t now_ms);
  * hold_ms of 0 makes the mood the new resting state; non-zero returns to the
  * previous resting mood afterwards.
  */
+/* Plays the boot animation: the face starts shut and opens its eyes. */
+void nev_persona_wake(uint32_t ms);
+
 void nev_persona_set_mood(nev_mood_t mood, uint8_t intensity, uint32_t hold_ms);
 
 nev_mood_t nev_persona_mood(void);

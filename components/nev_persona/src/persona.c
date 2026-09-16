@@ -79,6 +79,10 @@ void nev_persona_set_mood(nev_mood_t mood, uint8_t intensity, uint32_t hold_ms) 
     nev_persona_core_set_mood(&s_core, mood, intensity, hold_ms, nev_now_ms());
 }
 
+void nev_persona_wake(uint32_t ms) {
+    nev_persona_core_wake(&s_core, ms, nev_now_ms());
+}
+
 nev_mood_t nev_persona_mood(void) {
     return nev_persona_core_mood(&s_core);
 }

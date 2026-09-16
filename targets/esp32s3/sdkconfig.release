@@ -1,0 +1,47 @@
+# Release overlay. Applied on top of sdkconfig.defaults:
+#
+#   ./tools/build.sh release
+#
+# Everything here trades a debugging affordance for something the user gets:
+# a smaller image, a quieter log, a device that recovers from a bad update.
+#
+# NOT YET VERIFIED ON HARDWARE. These are deliberate choices, but no board has
+# run them — the first flash should be a debug build, and this overlay should be
+# the second thing tried, not the first.
+
+# ---------------------------------------------------------------- rollback
+# The whole point of the A/B partition layout. Without this, a build that
+# boots far enough to flash itself and then hangs is a brick that has to be
+# opened up and reflashed over USB; with it, the bootloader falls back to the
+# partition that was working. nev_ota must call esp_ota_mark_app_valid_cancel_rollback()
+# once the UI has drawn a frame, which is the device's own definition of "this
+# build works".
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+CONFIG_BOOTLOADER_WDT_ENABLE=y
+CONFIG_BOOTLOADER_WDT_TIME_MS=9000
+
+# ------------------------------------------------------------------- size
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+# Assertions stay compiled in but stop carrying __FILE__ strings, which are
+# most of what assertions cost in flash. A failed check still panics and still
+# lands in the core dump, which is what it is for.
+CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_SILENT=y
+CONFIG_COMPILER_STACK_CHECK_MODE_NONE=y
+
+# ------------------------------------------------------------------- noise
+# Warnings and errors only. An info-level log on a device nobody is watching
+# costs UART time inside the frame budget and fills a flash ring nobody reads.
+CONFIG_LOG_DEFAULT_LEVEL_WARN=y
+CONFIG_LOG_MAXIMUM_LEVEL_INFO=y
+
+# ---------------------------------------------------------------- watchdog
+# A task that stops feeding the watchdog is a device that has stopped
+# responding, and a reboot is a better answer than a face frozen mid-blink.
+CONFIG_ESP_TASK_WDT_INIT=y
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=10
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=y
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1=n
+
+# Kept: a device that panics in a customer's kitchen should still be able to
+# say why when it is brought back.
+CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y

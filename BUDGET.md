@@ -267,6 +267,52 @@ progress is polled rather than waited on.
 
 ---
 
+## M7 — power, audio capture, boot
+
+### Internal SRAM
+
+| Item | Bytes | Measured where | Note |
+|---|---|---|---|
+| Audio chunk buffer | 4,096 | `sizeof` | 2,048 samples: the wire maximum, 128 ms at 16 kHz |
+| Power core | 32 | `sizeof(nev_power_core_t)` | the whole idle policy |
+| **Committed total** | **~413 KB** | | of 512 KB |
+
+Capture costs one buffer because nothing is retained: chunks are published and
+released, and the blob pool — already counted in PSRAM — carries them for the
+few milliseconds between the audio service and the bridge. A meeting is the same
+cost as a note, which is the point of [ADR 0016](docs/adr/0016-two-audio-paths.md).
+
+### What a meeting costs, end to end
+
+| | Device | Daemon |
+|---|---|---|
+| An hour of audio | 4 KB at a time | under 1 MB at a time |
+| Retained afterwards | nothing | the text, and the audio only with `--keep-audio` |
+
+The daemon transcribes thirty seconds at a time rather than holding the meeting:
+an hour of 16 kHz mono is 115 MB, and it would be held on the machine that also
+has the model loaded.
+
+### The leak this milestone found
+
+A published blob leaks a reference unless the publisher releases it. The device
+target has swept for held buffers since M1; the simulator did not, so a missing
+release in the bridge's text path survived all of M6 on the host. It surfaced
+here as audio being dropped — `no blob for audio` — two subsystems away from the
+mistake, after 2 seconds of a meeting.
+
+The simulator now sweeps every 60 frames and fails at shutdown if anything is
+still held. CI runs headless, so that is a failed build rather than a warning
+nobody reads.
+
+### Frame time
+
+A 2,400-frame run with the bridge connected, a meeting recording and markers
+being sent averaged **20 us** per frame, worst case 1,376 us, none over budget.
+Audio capture is four buffer copies a second; it does not show up.
+
+---
+
 ## Method
 
 Internal and PSRAM figures come from `sizeof` and from the allocation sites,

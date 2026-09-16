@@ -8,7 +8,9 @@
 #include "nev_appkit/app.h"
 #include "nev_appkit/shell.h"
 #include "nev_appkit/ui_kit.h"
+#include "nev_bridge/nev_bridge.h"
 #include "nev_kernel/nev_store.h"
+#include "nev_services/audio_service.h"
 #include "nev_port/nev_log.h"
 
 #define TAG "settings"
@@ -43,8 +45,22 @@ static void toggle_setting_cb(lv_event_t *e) {
 static void factory_reset_confirmed(lv_event_t *e) {
     (void)e;
     NEV_LOGW(TAG, "factory reset requested from settings");
+
+    /*
+     * Stop before erasing, in this order, because a factory reset is what
+     * someone does before giving the device away.
+     *
+     * Clearing the stored token alone was not enough: the bridge holds its copy
+     * in memory and the microphone might be live, so the device would have gone
+     * on recording and sending to a computer it had supposedly been unpaired
+     * from until somebody power-cycled it. "Restart to apply" is a fine thing
+     * to say about a brightness setting and not about this.
+     */
+    audio_service_stop();
+    nev_bridge_forget();
+
     if (nev_store_factory_reset() == NEV_OK) {
-        nev_ui_toast("Reset. Restart to apply.", 3000);
+        nev_ui_toast("Erased. Restart to finish.", 3000);
         /* Deliberately not restarting here: yanking the UI out from under the
          * user mid-tap is worse than telling them. The restart is theirs. */
         nev_shell_go_home();

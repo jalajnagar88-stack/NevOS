@@ -64,6 +64,18 @@ void nev_persona_core_init(nev_persona_core_t *c, uint32_t now_ms, uint32_t seed
  * halfway there — which is what lets one event type produce a nudge and another
  * produce a reaction without needing two moods.
  */
+/*
+ * Starts the face shut, so the first thing it does is open its eyes.
+ *
+ * Called once at boot. It is not a mood — there is no "asleep" in the emotional
+ * vocabulary and adding one would put a row in the preset table that no app can
+ * ever ask for — it is the same tween machinery started from a closed face.
+ *
+ * `ms` is how long the eyes take to open. Slow enough to be noticed, short
+ * enough that it is not in the way of a device someone just switched on.
+ */
+void nev_persona_core_wake(nev_persona_core_t *c, uint32_t ms, uint32_t now_ms);
+
 void nev_persona_core_set_mood(nev_persona_core_t *c, nev_mood_t mood, uint8_t intensity,
                                uint32_t hold_ms, uint32_t now_ms);
 

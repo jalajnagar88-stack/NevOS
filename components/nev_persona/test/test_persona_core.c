@@ -236,6 +236,55 @@ static void test_invalid_mood_is_ignored(void) {
     TEST_ASSERT_NOT_NULL(nev_persona_core_tick(NULL, 0));
 }
 
+/* --------------------------------------------------------------- waking up */
+
+static void test_waking_starts_with_the_eyes_shut(void) {
+    /* The first frame after boot is the one people see. Starting at the idle
+     * preset and calling it an animation would just be a face appearing. */
+    nev_persona_core_t c;
+    nev_persona_core_init(&c, 0, 1);
+    nev_persona_core_wake(&c, 600, 0);
+
+    const nev_face_params_t *f = nev_persona_core_tick(&c, 0);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, f->eye_open);
+}
+
+static void test_waking_finishes_in_the_resting_mood(void) {
+    nev_persona_core_t c;
+    nev_persona_core_init(&c, 0, 1);
+    nev_persona_core_wake(&c, 600, 0);
+
+    const nev_face_params_t *f = nev_persona_core_tick(&c, 600);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, nev_face_preset(NEV_MOOD_IDLE)->eye_open, f->eye_open);
+    TEST_ASSERT_EQUAL_INT(NEV_MOOD_IDLE, nev_persona_core_mood(&c));
+}
+
+static void test_waking_opens_monotonically(void) {
+    /* A wake that dipped on its way open would read as a flinch. */
+    nev_persona_core_t c;
+    nev_persona_core_init(&c, 0, 1);
+    nev_persona_core_wake(&c, 600, 0);
+
+    float last = -1.0f;
+    for (uint32_t t = 0; t <= 600; t += 20) {
+        const float open = nev_persona_core_tick(&c, t)->eye_open;
+        TEST_ASSERT_TRUE_MESSAGE(open >= last - 0.001f, "the eyes closed again mid-wake");
+        last = open;
+    }
+}
+
+static void test_waking_does_not_blink_immediately(void) {
+    /* Opening the eyes and shutting them again is a flicker, not a greeting. */
+    nev_persona_core_t c;
+    nev_persona_core_init(&c, 0, 1);
+    nev_persona_core_wake(&c, 400, 0);
+
+    for (uint32_t t = 0; t <= 400; t += 10) {
+        nev_persona_core_tick(&c, t);
+        TEST_ASSERT_FALSE_MESSAGE(nev_persona_core_is_blinking(&c), "blinked during the wake");
+    }
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_starts_idle_and_settled);
@@ -252,5 +301,9 @@ int main(void) {
     RUN_TEST(test_different_seeds_diverge);
     RUN_TEST(test_survives_the_millisecond_wrap);
     RUN_TEST(test_invalid_mood_is_ignored);
+    RUN_TEST(test_waking_starts_with_the_eyes_shut);
+    RUN_TEST(test_waking_finishes_in_the_resting_mood);
+    RUN_TEST(test_waking_opens_monotonically);
+    RUN_TEST(test_waking_does_not_blink_immediately);
     return UNITY_END();
 }
