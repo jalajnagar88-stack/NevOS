@@ -12,3 +12,4 @@ compile_commands.json
 *.ppm
 shots/
 companion/target/
+nevos-settings.txt

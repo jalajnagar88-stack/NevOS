@@ -6,7 +6,6 @@
 #include "nev_kernel/nev_bus.h"
 #include "nev_kernel/nev_store.h"
 #include "nev_port/nev_log.h"
-#include "nev_port/nev_net.h"
 
 #define TAG     "net"
 
@@ -33,21 +32,14 @@ static void act(nev_net_action_t action) {
 
         case NEV_NET_DO_DISCONNECT:
             nev_board_wifi_disconnect();
-            nev_net_set_up(false);
             break;
 
         case NEV_NET_DO_UP:
-            /* The bridge waits on this, so it is set before the event is
-             * published rather than after: a subscriber that reacted to
-             * WIFI_UP by opening a socket would otherwise find the link
-             * still marked down. */
-            nev_net_set_up(true);
             NEV_LOGI(TAG, "online");
             (void)nev_bus_publish_type(NEV_EVT_NET_WIFI_UP, NEV_SRC_NET);
             break;
 
         case NEV_NET_DO_DOWN:
-            nev_net_set_up(false);
             NEV_LOGW(TAG, "offline");
             (void)nev_bus_publish_type(NEV_EVT_NET_WIFI_DOWN, NEV_SRC_NET);
             break;
@@ -86,7 +78,6 @@ nev_err_t net_service_init(uint32_t now_ms) {
 void net_service_deinit(void) {
     if (!s_ready) return;
     nev_board_wifi_disconnect();
-    nev_net_set_up(false);
     s_ready = false;
     s_sub = NULL;
 }
