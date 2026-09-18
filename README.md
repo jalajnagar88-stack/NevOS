@@ -46,6 +46,7 @@ sudo apt-get install -y cmake ninja-build libsdl2-dev clang-format
 ./tools/build.sh sim        # opens a 480x480 window
 ./tools/build.sh test       # host unit tests, no hardware
 ./tools/build.sh check      # what CI runs
+./tools/build.sh e2e        # the device against a real daemon, start to finish
 ```
 
 The companion daemon, which does the talking and the listening, runs on your own

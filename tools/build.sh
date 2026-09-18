@@ -12,6 +12,7 @@
 #   ./tools/build.sh check       lint + format + test + asan + both host builds
 #   ./tools/build.sh device      ESP32-S3 firmware (needs ESP-IDF on PATH)
 #   ./tools/build.sh release     the same, with the release overlay applied
+#   ./tools/build.sh e2e         the device against a real companion daemon
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -94,6 +95,11 @@ case "${1:-check}" in
     ./build/tests/bridge_live
     ;;
 
+  e2e)
+    # The device against a real daemon: see tools/ci/e2e.sh.
+    ./tools/ci/e2e.sh
+    ;;
+
   lint)
     python3 tools/ci/lint_layers.py
     # A checked-in codec that no longer matches the schema is the exact drift
@@ -159,7 +165,7 @@ case "${1:-check}" in
     ;;
 
   *)
-    sed -n '2,14p' "$0"
+    sed -n '2,15p' "$0"
     exit 2
     ;;
 esac

@@ -101,6 +101,23 @@ A menu bar or system tray app would be a nicer front door, and this page is what
 it would show. That is a separate piece of work — it needs a GUI toolchain per
 platform — and none of the behaviour here depends on it.
 
+### The end-to-end test
+
+```sh
+./tools/build.sh e2e
+```
+
+Starts a daemon, runs the device's own bridge against it, then runs the whole
+simulator: pairing that needs the code typed, a streamed answer, a meeting
+recorded and transcribed and filed, and a purge that keeps the pairing. It is
+what CI runs, and it exists because the unit tests cannot see wiring — a single
+line that marked the network down at startup once broke the bridge entirely
+while every state machine's own tests still passed.
+
+`NEVOS_DAEMON=127.0.0.1:4821` points the simulator at a fixed address instead of
+discovering one, which is how the test avoids depending on multicast working on
+somebody's build machine.
+
 ### Trying it without hardware
 
 ```sh

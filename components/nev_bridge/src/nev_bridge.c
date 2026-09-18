@@ -2,6 +2,7 @@
 #include "nev_bridge/nev_bridge.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "nev_bridge/nev_mdns.h"
@@ -378,6 +379,46 @@ static void on_message(const uint8_t *frame, size_t frame_len) {
 
 /* ---------------------------------------------------------------- lifecycle */
 
+/*
+ * A fixed daemon address, for development and for CI.
+ *
+ * Host builds only, and deliberately so: on the device there is nowhere for an
+ * environment variable to come from and no reason to want one — the robot has
+ * to find the daemon by itself or the setup story falls apart.
+ *
+ * It exists because multicast is the one thing in this system that depends on
+ * the network being friendly. A CI runner that silently drops mDNS would fail
+ * the end-to-end test for a reason that has nothing to do with NEVOS, and a
+ * flaky gate gets ignored, which is worse than not having one. Discovery itself
+ * is covered by nev_mdns's own tests and by running the simulator without this
+ * set, which is what a developer does by default.
+ *
+ *   NEVOS_DAEMON=127.0.0.1:4821 ./build/host/nevos_sim --bridge
+ */
+static bool fixed_daemon(char *ip, size_t ip_len, uint16_t *port) {
+#ifdef NEV_TARGET_HOST
+    const char *spec = getenv("NEVOS_DAEMON");
+    if (!spec || !*spec) return false;
+
+    const char *colon = strchr(spec, ':');
+    if (!colon) return false;
+    const size_t host_len = (size_t)(colon - spec);
+    if (host_len == 0 || host_len >= ip_len) return false;
+
+    memcpy(ip, spec, host_len);
+    ip[host_len] = '\0';
+    const unsigned parsed = (unsigned)atoi(colon + 1);
+    if (parsed == 0 || parsed > 65535u) return false;
+    *port = (uint16_t)parsed;
+    return true;
+#else
+    (void)ip;
+    (void)ip_len;
+    (void)port;
+    return false;
+#endif
+}
+
 void nev_bridge_init(void) {
     memset(&s_bridge, 0, sizeof(s_bridge));
     s_bridge.ws.sock = NEV_SOCKET_INVALID;
@@ -455,6 +496,21 @@ void nev_bridge_poll(void) {
     switch (s_bridge.state) {
         case NEV_BRIDGE_OFFLINE: {
             if (nev_elapsed_ms(s_bridge.retry_at_ms) > (uint32_t)INT32_MAX) return; /* not yet */
+
+            if (fixed_daemon(s_bridge.daemon_ip, sizeof(s_bridge.daemon_ip),
+                             &s_bridge.daemon_port)) {
+                snprintf(s_bridge.daemon_name, sizeof(s_bridge.daemon_name), "%s",
+                         s_bridge.daemon_ip);
+                NEV_LOGI(TAG, "using the configured daemon at %s:%u", s_bridge.daemon_ip,
+                         (unsigned)s_bridge.daemon_port);
+                if (!nev_ws_open(&s_bridge.ws, s_bridge.daemon_ip, s_bridge.daemon_port, "/ws")) {
+                    disconnect("could not open a socket");
+                    return;
+                }
+                set_state(NEV_BRIDGE_CONNECTING);
+                break;
+            }
+
             if (!nev_mdns_start(&s_bridge.mdns)) {
                 s_bridge.retry_at_ms = nev_now_ms() + BACKOFF_MAX_MS;
                 return;

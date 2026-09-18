@@ -61,6 +61,30 @@ jobs:
           name: framebuffer-${{ matrix.os }}
           path: build/shot.png
 
+  e2e:
+    # The device against a real daemon. Separate from the matrix above because
+    # it needs both toolchains and runs a wall-clock minute — and because when
+    # it fails, the thing that broke is integration, not any one unit.
+    name: device + daemon
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libsdl2-dev
+
+      - name: Pair, converse, record a meeting, purge it
+        run: ./tools/build.sh e2e
+
+      - name: Keep the logs when it fails
+        if: failure()
+        run: |
+          echo "Re-run locally with: NEVOS_E2E_KEEP=1 ./tools/build.sh e2e"
+
   device:
     name: esp32s3 firmware
     runs-on: ubuntu-latest
