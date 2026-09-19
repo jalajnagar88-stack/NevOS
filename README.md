@@ -27,9 +27,10 @@ buy and [ARCHITECTURE.md](ARCHITECTURE.md) for how it all fits.
 ./tools/build.sh sim -- --bridge      # find a daemon and pair with it
 ```
 
-Twelve apps: five original games, a clock, a focus timer, settings, the
-pairing screen, and three that use the companion daemon — ask, notes and
-meeting mode.
+Thirteen apps: five original games, a clock, a focus timer, settings, Wi-Fi,
+the pairing screen, and three that use the companion daemon — ask, notes and
+meeting mode. Ask and notes are push-to-talk: hold button A, or the button on
+the screen, and talk.
 
 ---
 
@@ -97,6 +98,12 @@ cd esp-idf && ./install.sh esp32s3
 ./tools/build.sh device build
 ./tools/build.sh device flash monitor
 ```
+
+The whole of the software runs on a laptop today. What is left is the drivers:
+`components/nev_board/src/esp32s3/board_esp32s3.c` is a stub, and the panel,
+touch controller, I2S, IMU, battery gauge and radio behind it arrive when a
+board does. Nothing above that file should need to change, and if something
+does, that is a layering bug worth reporting rather than working around.
 
 At M1 the device target runs `nev_port` and `nev_kernel` on real silicon. The
 display, touch, audio and radio stacks arrive at M5, when the pins in

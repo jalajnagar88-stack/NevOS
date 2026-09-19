@@ -334,6 +334,35 @@ configuration, which is why nothing above it has been allowed to sprawl.
 
 ---
 
+## Closing the four gaps — push-to-talk, notifications, OTA, Wi-Fi
+
+| Item | Bytes | Note |
+|---|---|---|
+| Push-to-talk state machine | 32 | one per device; the apps share it |
+| OTA service | 200 | the core plus a 48-byte reason string |
+| OTA offer, in flight | 56 | a blob, from the pool, released the same tick |
+| Wi-Fi password in the store | 72 | one more `NEV_STORE_STR_MAX` slot |
+| **Committed total** | **~415 KB** | of 512 KB — unchanged to the nearest KB |
+
+Nothing here moved the number that matters, which is the point of writing it
+down: four user-visible features for well under a kilobyte of internal memory,
+because all four are state machines over events that already existed.
+
+The exception is the Wi-Fi app, and it is not internal SRAM. LVGL's keyboard is
+a 4x10 button matrix and its widget tree is the largest of any screen in the
+system — the app declares a 28 KB budget against `LV_MEM_SIZE`, the highest of
+the thirteen. It is a screen a person sees twice in the life of the device and
+the shell evicts it like any other, so it costs nothing at rest. It is worth
+watching if `LV_MEM_SIZE` is ever cut from 256 KB, which is the first lever in
+the list above.
+
+The OTA download is not in this table because it is not written. When it is, it
+will need a staging buffer and a partition to write into, and the partition is
+the device's, not the simulator's. That is the one place where the arithmetic
+here stops being checkable on a laptop.
+
+---
+
 ## Method
 
 Internal and PSRAM figures come from `sizeof` and from the allocation sites,

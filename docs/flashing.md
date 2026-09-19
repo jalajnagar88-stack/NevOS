@@ -61,8 +61,11 @@ The device has no keyboard, so setup happens in this order:
 1. It shows its eyes opening, then the home screen. **Everything on it works at
    this point** — clock, games, timer, the face. No network, no computer, no
    account ([ADR 0008](adr/0008-offline-first.md)).
-2. Wi-Fi: Settings → Wi-Fi. (M5. Until then the device is offline by
-   definition, which is a smaller loss than it sounds.)
+2. Wi-Fi: **Settings → Wi-Fi**. Type the network name and the password on the
+   on-screen keyboard and press Save. The password is never shown again, not
+   even as dots, because a device on a desk is looked at by whoever walks past
+   it. (The radio behind this arrives with the board; the screen, the state
+   machine and the stored credentials work on the simulator today.)
 3. Start `nevosd` on your computer — see [daemon.md](daemon.md).
 4. Open **Computer** on the device. It finds the daemon and shows six digits.
 5. Type those digits into the control panel at <http://127.0.0.1:4822/>.
@@ -70,6 +73,11 @@ The device has no keyboard, so setup happens in this order:
 That is the whole setup. The code is the only step that needs a human, and it
 is there so that a device on the network cannot pair itself
 ([ADR 0014](adr/0014-two-listeners.md)).
+
+Then hold **button A** — or the button on the screen in Notes and Ask — and
+talk. A press has to survive 120 ms before the microphone opens, so a sleeve
+brushing it records nothing, and a capture shorter than 350 ms is thrown away
+rather than sent; both are deliberate, and `talk_core.h` says why.
 
 ## When something is wrong
 
