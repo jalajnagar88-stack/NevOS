@@ -97,15 +97,20 @@ typedef struct {
     /* 16 kHz mono signed 16-bit little-endian. */
     const uint8_t *pcm; /* borrowed */
     size_t pcm_len;
-    /* 0 for a dictated note, 1 for a long-form capture (meeting mode).
+    /* 0 for a dictated note, 1 for a long-form capture (meeting mode), 2 for a spoken
+     * question.
      * 
-     * The difference is what the daemon does with it, and the two are not the same
-     * job: a note is a few seconds, transcribed in one go and filed when it ends,
-     * while a capture runs for an hour, is transcribed in segments as it arrives, and
-     * must never be held in memory whole.
+     * The difference is what the daemon does with it, and none of the three are the
+     * same job. A note is a few seconds, transcribed in one go and filed when it ends.
+     * A capture runs for an hour, is transcribed in segments as it arrives, and must
+     * never be held in memory whole. A question is transcribed like a note and then
+     * deliberately not filed: it is the text of something the user said to the agent,
+     * and keeping a file for every "what time is it" turns the notes folder into
+     * rubbish nobody asked to keep.
      * 
      * Appended after the fact, so an older device that does not send it gets 0 — which
-     * is the behaviour it had before the field existed. */
+     * is the behaviour it had before the field existed. An unknown value is treated as
+     * a note, which keeps the audio rather than dropping it. */
     uint8_t kind;
 } nev_msg_audio_chunk_t;
 

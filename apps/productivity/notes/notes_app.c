@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "nev_apps/talk.h"
 #include "nev_appkit/app.h"
 #include "nev_appkit/theme.h"
 #include "nev_appkit/ui_kit.h"
@@ -72,6 +73,31 @@ static void add_note(const char *text) {
     rebuild_list();
 }
 
+/*
+ * What the microphone is doing, in the status line.
+ *
+ * The one that matters is DISCARDED: a capture thrown away for being a tenth of
+ * a second long looks exactly like one the daemon could not hear, and the user
+ * fixes the two in completely different ways.
+ */
+static void talk_changed(nev_talk_state_t state, const char *detail) {
+    switch (state) {
+        case NEV_TALK_LISTENING:
+            set_status("Listening", NEV_COL_SUCCESS);
+            break;
+        case NEV_TALK_SENT:
+            set_status("Transcribing...", NEV_COL_INK_FAINT);
+            break;
+        case NEV_TALK_DISCARDED:
+        case NEV_TALK_UNAVAILABLE:
+            set_status(detail, NEV_COL_WARN);
+            break;
+        case NEV_TALK_IDLE:
+        default:
+            break;
+    }
+}
+
 static nev_err_t notes_launch(lv_obj_t *root) {
     lv_obj_set_flex_flow(root, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(root, NEV_SP_4, 0);
@@ -89,6 +115,10 @@ static nev_err_t notes_launch(lv_obj_t *root) {
         nev_ui_label(root, "Hold the button and say something", NEV_FONT_BODY, NEV_COL_INK_MUTED);
     s_status = nev_ui_label(root, "", NEV_FONT_CAPTION, NEV_COL_INK_FAINT);
 
+    /* The on-screen button and button A are the same gesture; nev_talk owns
+     * both. It is built last so it sits at the bottom, under the thumb. */
+    nev_talk_attach(root, NEV_AUDIO_KIND_NOTE, talk_changed);
+
     s_count = 0;
     rebuild_list();
 
@@ -101,6 +131,11 @@ static nev_err_t notes_launch(lv_obj_t *root) {
 }
 
 static void notes_event(const nev_event_t *ev) {
+    /* Button A is hold-to-talk. Given to nev_talk first and unconditionally:
+     * a release must reach the state machine even when the app has decided it
+     * has nothing else to do with it, or the microphone stays open. */
+    nev_talk_event(ev);
+
     switch (ev->type) {
         case NEV_EVT_BRIDGE_TRANSCRIPT_PARTIAL: {
             const char *text = (const char *)nev_blob_data(ev->p.blob.handle);
@@ -122,6 +157,10 @@ static void notes_event(const nev_event_t *ev) {
         }
 
         case NEV_EVT_BRIDGE_DISCONNECTED:
+            /* Recording into a link that is gone wastes the user's breath, and
+             * unlike meeting mode there is nothing to salvage: a note is only
+             * worth anything once the computer has transcribed it. */
+            nev_talk_stop();
             set_status("Not connected. Nothing can be saved right now.", NEV_COL_WARN);
             break;
 
@@ -135,7 +174,14 @@ static void notes_event(const nev_event_t *ev) {
     }
 }
 
+static void notes_tick(uint32_t now_ms) {
+    /* Without this a held button never arms, because arming is a decision about
+     * elapsed time and nothing else calls the state machine. */
+    nev_talk_tick(now_ms);
+}
+
 static void notes_close(void) {
+    nev_talk_detach();
     /* The session's notes go with the app. They are on the computer. */
     memset(s_notes, 0, sizeof(s_notes));
     s_count = 0;
@@ -151,6 +197,7 @@ static const nev_app_desc_t kNotesApp = {
     .requires_bridge = true,
     .on_launch = notes_launch,
     .on_event = notes_event,
+    .on_tick = notes_tick,
     .on_close = notes_close,
 };
 

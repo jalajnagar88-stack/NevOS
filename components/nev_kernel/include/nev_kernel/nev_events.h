@@ -107,6 +107,7 @@ enum nev_domain_id {
     X(BRIDGE, AGENT_DONE, 0x07)                                                                    \
     X(BRIDGE, NOTIFICATION, 0x08)                                                                  \
     X(BRIDGE, MOOD_HINT, 0x09)                                                                     \
+    X(BRIDGE, OTA_OFFER, 0x0A)                                                                     \
     /* POWER — produced by power_service */                                                      \
     X(POWER, BATTERY, 0x01)                                                                        \
     X(POWER, IDLE_ENTER, 0x02)                                                                     \
@@ -119,7 +120,11 @@ enum nev_domain_id {
     X(GAME, SCORE, 0x01)                                                                           \
     X(GAME, OVER, 0x02)                                                                            \
     X(GAME, HIGHSCORE_BEAT, 0x03)                                                                  \
-    /* OTA — produced by ota_service */                                                          \
+    /* OTA — produced by ota_service, and by nothing else. The bridge relays the                 \
+       daemon's offer as BRIDGE.OTA_OFFER and ota_service decides what it means;                   \
+       the bridge publishing OTA.AVAILABLE directly put two producers in one                       \
+       domain and tripped the assert in nev_bus_publish the first time anything                    \
+       exercised it. */                                                                            \
     X(OTA, AVAILABLE, 0x01)                                                                        \
     X(OTA, PROGRESS, 0x02)                                                                         \
     X(OTA, READY, 0x03)                                                                            \

@@ -90,6 +90,15 @@ typedef struct {
 typedef enum {
     NEV_AUDIO_KIND_NOTE = 0,
     NEV_AUDIO_KIND_TRANSCRIPT = 1,
+    /*
+     * Spoken at the device, transcribed, handed straight back, and not filed.
+     *
+     * A question is not a note. Sending one as a note leaves a file on the
+     * owner's disk for every "what time is it" they ever said out loud, and
+     * then the notes list — the thing they went to the trouble of keeping local
+     * — is mostly rubbish they never asked to keep.
+     */
+    NEV_AUDIO_KIND_QUESTION = 2,
 } nev_audio_kind_t;
 
 typedef struct {

@@ -228,10 +228,10 @@ async fn connection(socket: WebSocket, state: Arc<Daemon>) {
                         }
                     }
                 }
-                Action::Utterance { session: s, pcm } => {
+                Action::Utterance { session: s, pcm, file } => {
                     let state = state.clone();
                     let tx = out_tx.clone();
-                    tokio::spawn(async move { transcribe(state, tx, s, pcm).await });
+                    tokio::spawn(async move { transcribe(state, tx, s, pcm, file).await });
                 }
                 Action::Ask { turn: n, text, app } => {
                     // The newest question wins; abandon whatever was running
@@ -483,7 +483,15 @@ async fn capture_task(
 }
 
 /// Transcribes one utterance and files it.
-async fn transcribe(state: Arc<Daemon>, tx: mpsc::Sender<Out>, audio_session: u32, pcm: Vec<i16>) {
+/// Transcribes one utterance and sends it back. `file` decides whether it is
+/// also kept: a dictated note is the user's to keep, a spoken question is not.
+async fn transcribe(
+    state: Arc<Daemon>,
+    tx: mpsc::Sender<Out>,
+    audio_session: u32,
+    pcm: Vec<i16>,
+    file: bool,
+) {
     let seconds = pcm.len() as f32 / crate::session::SAMPLE_RATE as f32;
     let transcript = match state.stt.transcribe(&pcm, crate::session::SAMPLE_RATE).await {
         Ok(t) => t,
@@ -512,6 +520,14 @@ async fn transcribe(state: Arc<Daemon>, tx: mpsc::Sender<Out>, audio_session: u3
         .await;
 
     if transcript.text.trim().is_empty() {
+        return;
+    }
+
+    // The device has its answer. Everything below this line is about keeping a
+    // copy, and a question asked out loud does not get one — not the text, and
+    // not the audio either, whatever `keep_audio` says. That setting is about
+    // notes the user chose to dictate.
+    if !file {
         return;
     }
 

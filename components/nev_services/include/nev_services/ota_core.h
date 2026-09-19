@@ -2,6 +2,7 @@
 #ifndef NEV_SERVICES_OTA_CORE_H
 #define NEV_SERVICES_OTA_CORE_H
 
+#include "nev_kernel/nev_ota_offer.h"
 #include "nev_kernel/nev_sha256.h"
 #include "nev_port/nev_types.h"
 
@@ -38,15 +39,11 @@ typedef enum {
     NEV_OTA_REJECT_DIGEST,    /* the bytes are not the ones offered */
 } nev_ota_reject_t;
 
-typedef struct {
-    char version[24];
-    uint32_t size_bytes;
-    uint8_t sha256[NEV_SHA256_DIGEST_LEN];
-} nev_ota_offer_t;
+/* nev_ota_offer_t is the bus payload, so it lives in nev_kernel. */
 
 typedef struct {
     uint32_t partition_bytes; /* what the image has to fit into */
-    char current_version[24];
+    char current_version[NEV_OTA_VERSION_MAX];
 
     nev_ota_state_t state;
     nev_ota_reject_t reject;

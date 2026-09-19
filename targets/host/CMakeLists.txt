@@ -78,7 +78,9 @@ target_include_directories(nevos_game PUBLIC ${NEV_GAME_INCLUDE_DIRS})
 target_link_libraries(nevos_game PUBLIC nevos_appkit)
 
 add_library(nevos_apps STATIC ${NEV_APP_SRCS})
-target_include_directories(nevos_apps PRIVATE ${NEV_GAME_RULE_INCLUDE_DIRS})
+target_include_directories(nevos_apps
+  PRIVATE ${NEV_GAME_RULE_INCLUDE_DIRS}
+  PUBLIC ${NEV_APP_COMMON_INCLUDE_DIRS})
 # Apps may call downward into L2 — the meeting app drives the audio service
 # directly, the way the link app drives the bridge.
 target_link_libraries(nevos_apps PUBLIC nevos_appkit nevos_game nevos_services)

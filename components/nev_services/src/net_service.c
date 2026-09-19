@@ -27,7 +27,14 @@ static bool have_credentials(void) {
 static void act(nev_net_action_t action) {
     switch (action) {
         case NEV_NET_DO_CONNECT:
-            (void)nev_board_wifi_connect(nev_store_str(NEV_SET_WIFI_SSID), "");
+            /*
+             * The password goes with the SSID. It said "" for one milestone,
+             * which associated with open networks and silently failed against
+             * every secured one — and the failure looks identical to a router
+             * that is out of range, so there was nothing to debug from.
+             */
+            (void)nev_board_wifi_connect(nev_store_str(NEV_SET_WIFI_SSID),
+                                         nev_store_str(NEV_SET_WIFI_PASS));
             break;
 
         case NEV_NET_DO_DISCONNECT:

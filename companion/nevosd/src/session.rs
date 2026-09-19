@@ -79,6 +79,11 @@ pub enum CaptureKind {
     /// Meeting mode: minutes or hours, transcribed in segments as it arrives
     /// and never held in memory whole.
     Transcript,
+    /// Something said to the agent. Transcribed exactly like a note and
+    /// deliberately not filed: a spoken question is not a note, and keeping one
+    /// for every "what time is it" fills the owner's notes folder with rubbish
+    /// they never asked to keep.
+    Question,
 }
 
 impl CaptureKind {
@@ -88,6 +93,7 @@ impl CaptureKind {
         // dropping it, which is the better of the two wrong answers.
         match v {
             1 => CaptureKind::Transcript,
+            2 => CaptureKind::Question,
             _ => CaptureKind::Note,
         }
     }
@@ -102,8 +108,10 @@ pub enum Action {
     Close(String),
     /// The device is showing this code and wants to pair.
     RequestPairing { device_id: String, code: String },
-    /// A complete utterance, ready to transcribe.
-    Utterance { session: u32, pcm: Vec<i16> },
+    /// A complete utterance, ready to transcribe. `file` says whether the
+    /// result is the user's to keep — true for a dictated note, false for a
+    /// question, which is transcribed and handed back and nothing more.
+    Utterance { session: u32, pcm: Vec<i16>, file: bool },
     /// Audio belonging to a long capture. Handed straight on rather than
     /// accumulated: an hour at 16 kHz is 115 MB, and the device can keep
     /// talking for as long as it likes.
@@ -428,7 +436,11 @@ impl Session {
             tracing::warn!(session = chunk.session, "utterance exceeded {MAX_UTTERANCE_SECS}s");
             let pcm = std::mem::take(&mut self.audio);
             self.audio_session = None;
-            actions.push(Action::Utterance { session: chunk.session, pcm });
+            actions.push(Action::Utterance {
+                session: chunk.session,
+                pcm,
+                file: self.kind == CaptureKind::Note,
+            });
             return actions;
         }
         self.audio.extend(samples);
@@ -439,7 +451,11 @@ impl Session {
             // An empty capture — the button pressed and released — is not an
             // utterance. Transcribing silence produces confident nonsense.
             if !pcm.is_empty() {
-                actions.push(Action::Utterance { session: chunk.session, pcm });
+                actions.push(Action::Utterance {
+                    session: chunk.session,
+                    pcm,
+                    file: self.kind == CaptureKind::Note,
+                });
             }
         }
         actions
@@ -525,11 +541,15 @@ mod tests {
     }
 
     fn audio(session: u32, seq: u32, samples: &[i16], last: bool) -> Vec<u8> {
+        audio_of_kind(session, seq, samples, last, 0)
+    }
+
+    fn audio_of_kind(session: u32, seq: u32, samples: &[i16], last: bool, kind: u8) -> Vec<u8> {
         let mut pcm = Vec::new();
         for s in samples {
             pcm.extend_from_slice(&s.to_le_bytes());
         }
-        AudioChunk { seq, session, r#final: last, pcm, kind: 0 }.encode()
+        AudioChunk { seq, session, r#final: last, pcm, kind }.encode()
     }
 
     #[test]
@@ -681,7 +701,7 @@ mod tests {
 
         assert_eq!(
             actions.last(),
-            Some(&Action::Utterance { session: 4, pcm: vec![1, 2, 3, 4, 5, 6] })
+            Some(&Action::Utterance { session: 4, pcm: vec![1, 2, 3, 4, 5, 6], file: true })
         );
         assert!(!s.is_capturing(), "capture must end with the final chunk");
     }
@@ -696,7 +716,7 @@ mod tests {
         let actions = s.on_frame(&audio(4, 3, &[3], true), NOW, &auth);
         assert_eq!(
             actions.last(),
-            Some(&Action::Utterance { session: 4, pcm: vec![1, 2, 3] })
+            Some(&Action::Utterance { session: 4, pcm: vec![1, 2, 3], file: true })
         );
     }
 
@@ -705,7 +725,33 @@ mod tests {
         let (mut s, auth) = ready_session();
         s.on_frame(&audio(1, 0, &[9, 9, 9], false), NOW, &auth);
         let actions = s.on_frame(&audio(2, 0, &[1, 2], true), NOW, &auth);
-        assert_eq!(actions.last(), Some(&Action::Utterance { session: 2, pcm: vec![1, 2] }));
+        assert_eq!(actions.last(), Some(&Action::Utterance { session: 2, pcm: vec![1, 2], file: true }));
+    }
+
+    #[test]
+    fn a_spoken_question_is_transcribed_but_not_filed() {
+        // The device still gets its transcript; what it does not get is a file
+        // on the owner's disk for every question they ever asked out loud.
+        let (mut s, auth) = ready_session();
+        let actions = s.on_frame(&audio_of_kind(7, 0, &[1, 2], true, 2), NOW, &auth);
+        assert_eq!(
+            actions.last(),
+            Some(&Action::Utterance { session: 7, pcm: vec![1, 2], file: false })
+        );
+    }
+
+    #[test]
+    fn the_kind_is_read_from_the_first_chunk_of_a_session() {
+        // Only the first chunk of a session sets the kind, so a device that
+        // sends the field once must not have its question filed as a note by a
+        // later chunk that defaulted to zero.
+        let (mut s, auth) = ready_session();
+        s.on_frame(&audio_of_kind(9, 0, &[1], false, 2), NOW, &auth);
+        let actions = s.on_frame(&audio_of_kind(9, 1, &[2], true, 0), NOW, &auth);
+        assert_eq!(
+            actions.last(),
+            Some(&Action::Utterance { session: 9, pcm: vec![1, 2], file: false })
+        );
     }
 
     #[test]
@@ -801,7 +847,13 @@ mod tests {
         let frame =
             AudioChunk { seq: 0, session: 1, r#final: true, pcm: vec![1, 0], kind: 99 }.encode();
         let actions = s.on_frame(&frame, NOW, &auth);
-        assert!(matches!(actions.last(), Some(Action::Utterance { .. })), "{actions:?}");
+        // Filed, too: the audio is real and the user said it on purpose, so the
+        // fallback has to be the kind that keeps things rather than the one
+        // that throws them away.
+        assert_eq!(
+            actions.last(),
+            Some(&Action::Utterance { session: 1, pcm: vec![1], file: true })
+        );
     }
 
     #[test]

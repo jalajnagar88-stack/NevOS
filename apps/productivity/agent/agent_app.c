@@ -8,14 +8,19 @@
  * which makes people repeat themselves, which makes it worse. Tokens appearing
  * is the device saying "I am working on it" in the only vocabulary it has.
  *
- * Push-to-talk is the primary input on hardware (ADR 0009). The tappable
- * prompts exist because they work on the simulator, where there is no
- * microphone, and because on hardware they are the fastest way to ask something
- * you ask often without saying it out loud.
+ * Push-to-talk is the primary input (ADR 0009): hold the button, ask, let go.
+ * The audio goes up as a QUESTION capture rather than a note, so the daemon
+ * transcribes it and hands it back without filing anything — a question you
+ * asked out loud should not quietly become a note on somebody's disk.
+ *
+ * The tappable prompts stay. They are the fastest way to ask something you ask
+ * often without saying it out loud, and they are the whole app on a device
+ * whose microphone is off or missing.
  */
 #include <stdio.h>
 #include <string.h>
 
+#include "nev_apps/talk.h"
 #include "nev_appkit/app.h"
 #include "nev_appkit/theme.h"
 #include "nev_appkit/ui_kit.h"
@@ -74,6 +79,28 @@ static void prompt_clicked(lv_event_t *e) {
     ask(text);
 }
 
+static void talk_changed(nev_talk_state_t state, const char *detail) {
+    switch (state) {
+        case NEV_TALK_LISTENING:
+            set_status("Listening", NEV_COL_SUCCESS);
+            lv_obj_add_flag(s_prompts, LV_OBJ_FLAG_HIDDEN);
+            break;
+        case NEV_TALK_SENT:
+            set_status("Working out what you said", NEV_COL_INK_MUTED);
+            break;
+        case NEV_TALK_DISCARDED:
+        case NEV_TALK_UNAVAILABLE:
+            set_status(detail, NEV_COL_WARN);
+            /* The prompts come back, because they are now the only way to ask
+             * anything and the user has just been told the other way failed. */
+            lv_obj_remove_flag(s_prompts, LV_OBJ_FLAG_HIDDEN);
+            break;
+        case NEV_TALK_IDLE:
+        default:
+            break;
+    }
+}
+
 static nev_err_t agent_launch(lv_obj_t *root) {
     lv_obj_set_flex_flow(root, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(root, NEV_SP_4, 0);
@@ -102,6 +129,8 @@ static nev_err_t agent_launch(lv_obj_t *root) {
         lv_obj_set_width(b, LV_PCT(100));
     }
 
+    nev_talk_attach(root, NEV_AUDIO_KIND_QUESTION, talk_changed);
+
     s_reply_text[0] = '\0';
     s_waiting = false;
     if (nev_bridge_state() == NEV_BRIDGE_READY) {
@@ -128,6 +157,8 @@ static void append_token(const nev_event_t *ev) {
 }
 
 static void agent_event(const nev_event_t *ev) {
+    nev_talk_event(ev);
+
     switch (ev->type) {
         case NEV_EVT_BRIDGE_AGENT_TOKEN:
             append_token(ev);
@@ -154,11 +185,21 @@ static void agent_event(const nev_event_t *ev) {
              * here rather than from the transcript arriving at the notes app
              * keeps one question in flight at a time. */
             const char *text = (const char *)nev_blob_data(ev->p.blob.handle);
-            if (text && text[0] != '\0') ask(text);
+            if (text && text[0] != '\0') {
+                ask(text);
+            } else {
+                /* The daemon heard nothing usable. Without this the status line
+                 * sits on "Working out what you said" until the app is closed,
+                 * and a device that looks permanently busy is worse than one
+                 * that admits it missed. */
+                set_status("I did not catch that", NEV_COL_WARN);
+                lv_obj_remove_flag(s_prompts, LV_OBJ_FLAG_HIDDEN);
+            }
             break;
         }
 
         case NEV_EVT_BRIDGE_DISCONNECTED:
+            nev_talk_stop();
             s_waiting = false;
             set_status("The computer went away", NEV_COL_WARN);
             lv_obj_remove_flag(s_prompts, LV_OBJ_FLAG_HIDDEN);
@@ -173,7 +214,12 @@ static void agent_event(const nev_event_t *ev) {
     }
 }
 
+static void agent_tick(uint32_t now_ms) {
+    nev_talk_tick(now_ms);
+}
+
 static void agent_close(void) {
+    nev_talk_detach();
     s_question = s_reply = s_status = s_prompts = NULL;
     s_waiting = false;
 }
@@ -187,6 +233,7 @@ static const nev_app_desc_t kAgentApp = {
     .requires_bridge = true,
     .on_launch = agent_launch,
     .on_event = agent_event,
+    .on_tick = agent_tick,
     .on_close = agent_close,
 };
 

@@ -31,6 +31,7 @@
 #include "nev_services/audio_service.h"
 #include "nev_services/power_service.h"
 #include "nev_services/net_service.h"
+#include "nev_services/ota_service.h"
 #include "nev_services/sound_service.h"
 #include "nev_services/sys_service.h"
 #include "lvgl.h"
@@ -334,6 +335,7 @@ int main(int argc, char **argv) {
     if (sound_service_init() != NEV_OK) return 1;
     if (sys_service_init(nev_now_ms()) != NEV_OK) return 1;
     if (net_service_init(nev_now_ms()) != NEV_OK) return 1;
+    if (ota_service_init() != NEV_OK) return 1;
 
     /*
      * The simulator knows what time it is; the device does not until the daemon
@@ -415,6 +417,7 @@ int main(int argc, char **argv) {
         audio_service_poll(now_ms);
         sound_service_tick(now_ms);
         net_service_tick(now_ms);
+        ota_service_tick(now_ms);
         sys_service_tick(now_ms);
         /* On the device this runs on the network task, not here. In the
          * simulator there is one thread, and the bridge never blocks, so the

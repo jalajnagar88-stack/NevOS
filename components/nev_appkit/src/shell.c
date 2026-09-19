@@ -368,7 +368,7 @@ nev_err_t nev_shell_init(lv_obj_t *screen) {
     const nev_sub_cfg_t cfg = {
         .name = "shell",
         .domains = NEV_DOM(INPUT) | NEV_DOM(NET) | NEV_DOM(POWER) | NEV_DOM(BRIDGE) | NEV_DOM(SYS) |
-                   NEV_DOM(STORAGE),
+                   NEV_DOM(STORAGE) | NEV_DOM(OTA),
         .depth = 24,
         .full_policy = NEV_FULL_DROP_OLDEST,
         .coalesce = true,
@@ -430,6 +430,43 @@ static void handle_event(const nev_event_t *ev) {
             s_charging = ev->p.battery.charging != 0;
             paint_status();
             break;
+
+        case NEV_EVT_BRIDGE_NOTIFICATION: {
+            /*
+             * The companion computer wanting the user's attention: a timer on
+             * the laptop, a build that finished, whatever the owner wired up.
+             *
+             * It lands here rather than in an app because there is no
+             * notifications app and there should not be one — the point of a
+             * thing on a desk is that it tells you without being opened. The
+             * shell owns the screen, so the shell is the only place a message
+             * can appear over whatever is running.
+             */
+            const char *text = (const char *)nev_blob_data(ev->p.blob.handle);
+            if (!text || text[0] == '\0') break;
+            /* chunk_seq carries urgency, set by the bridge from the wire. */
+            if (ev->p.blob.chunk_seq) {
+                nev_ui_toast_alert(text, 6000);
+            } else {
+                nev_ui_toast(text, 3500);
+            }
+            break;
+        }
+
+        case NEV_EVT_OTA_AVAILABLE: {
+            /*
+             * Noticed, not installed. An update that applies itself while
+             * somebody is mid-sentence is the worst possible behaviour for a
+             * device that lives on a desk; settings is where it gets taken.
+             */
+            const char *version = (const char *)nev_blob_data(ev->p.blob.handle);
+            if (version && version[0]) {
+                char line[64];
+                snprintf(line, sizeof(line), "Update %s is ready in Settings", version);
+                nev_ui_toast(line, 5000);
+            }
+            break;
+        }
 
         case NEV_EVT_STORAGE_SETTING_CHANGED:
             if (ev->p.u32[0] == NEV_SET_TIME_24H) paint_clock(true);

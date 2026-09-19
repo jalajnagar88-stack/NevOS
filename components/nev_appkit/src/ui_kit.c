@@ -66,6 +66,22 @@ lv_obj_t *nev_ui_button_ghost(lv_obj_t *parent, const char *text, lv_event_cb_t 
 
 /* -------------------------------------------------------------------- list */
 
+lv_obj_t *nev_ui_hold_button(lv_obj_t *parent, const char *text, lv_event_cb_t cb,
+                             void *user_data) {
+    /* button_base wires CLICKED, which is the wrong edge entirely here: a click
+     * is reported after the release, so a hold-to-talk button built on it would
+     * open the microphone once the talking had stopped. */
+    lv_obj_t *b = button_base(parent, text, NULL, NULL);
+    lv_obj_set_style_bg_color(b, NEV_COL_SURFACE_ALT, LV_PART_MAIN);
+    lv_obj_set_style_text_color(b, NEV_COL_INK, LV_PART_MAIN);
+    if (cb) {
+        lv_obj_add_event_cb(b, cb, LV_EVENT_PRESSED, user_data);
+        lv_obj_add_event_cb(b, cb, LV_EVENT_RELEASED, user_data);
+        lv_obj_add_event_cb(b, cb, LV_EVENT_PRESS_LOST, user_data);
+    }
+    return b;
+}
+
 lv_obj_t *nev_ui_list(lv_obj_t *parent) {
     lv_obj_t *l = lv_obj_create(parent);
     lv_obj_remove_style_all(l);
@@ -181,24 +197,38 @@ static void toast_expire(lv_timer_t *t) {
     s_toast_timer = NULL;
 }
 
-void nev_ui_toast(const char *text, uint32_t ms) {
+static void toast_build(const char *text, uint32_t ms, lv_color_t bg) {
     /* One at a time. A stack of toasts on a 480px screen is a wall. */
     toast_expire(NULL);
 
     s_toast = lv_obj_create(lv_layer_top());
     lv_obj_remove_style_all(s_toast);
     nev_theme_apply_surface(s_toast, NEV_RADIUS_FULL);
-    lv_obj_set_style_bg_color(s_toast, NEV_COL_SURFACE_ALT, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(s_toast, bg, LV_PART_MAIN);
     lv_obj_set_style_pad_hor(s_toast, NEV_SP_5, LV_PART_MAIN);
     lv_obj_set_style_pad_ver(s_toast, NEV_SP_3, LV_PART_MAIN);
-    lv_obj_set_size(s_toast, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    /* Bounded, or a notification with a long title runs off both edges of a
+     * round screen and the middle of the sentence is all anyone sees. */
+    lv_obj_set_width(s_toast, LV_SIZE_CONTENT);
+    lv_obj_set_style_max_width(s_toast, LV_PCT(86), LV_PART_MAIN);
+    lv_obj_set_height(s_toast, LV_SIZE_CONTENT);
     lv_obj_add_flag(s_toast, LV_OBJ_FLAG_IGNORE_LAYOUT);
 
-    nev_ui_label(s_toast, text, NEV_FONT_BODY, NEV_COL_INK);
+    lv_obj_t *label = nev_ui_label(s_toast, text, NEV_FONT_BODY, NEV_COL_INK);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_align(s_toast, LV_ALIGN_BOTTOM_MID, 0, -NEV_SP_6);
 
     s_toast_timer = lv_timer_create(toast_expire, ms ? ms : 2000, NULL);
     lv_timer_set_repeat_count(s_toast_timer, 1);
+}
+
+void nev_ui_toast(const char *text, uint32_t ms) {
+    toast_build(text, ms, NEV_COL_SURFACE_ALT);
+}
+
+void nev_ui_toast_alert(const char *text, uint32_t ms) {
+    toast_build(text, ms, NEV_COL_WARN);
 }
 
 /* ------------------------------------------------------------------ modal */
@@ -262,7 +292,12 @@ void nev_ui_modal(const char *title, const char *body, const char *confirm_text,
     lv_obj_set_style_pad_column(actions, NEV_SP_2, LV_PART_MAIN);
     lv_obj_set_style_pad_top(actions, NEV_SP_2, LV_PART_MAIN);
 
-    nev_ui_button_ghost(actions, "Cancel", modal_dismiss_cb, NULL);
+    /*
+     * No Cancel when there is nothing to cancel. A dialog that only reports
+     * something gets one button, because two buttons that do the same thing
+     * make a person stop and work out which one is safe.
+     */
+    if (on_confirm) nev_ui_button_ghost(actions, "Cancel", modal_dismiss_cb, NULL);
     lv_obj_t *ok =
         nev_ui_button(actions, confirm_text ? confirm_text : "OK", modal_confirm_cb, user_data);
     if (destructive) {

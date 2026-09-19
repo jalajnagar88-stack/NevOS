@@ -56,6 +56,11 @@ extern "C" {
        the daemon then lists as a second robot. */                                                 \
     X(DEVICE_ID, STR, "device_id", "", 0, 32)                                                      \
     X(WIFI_SSID, STR, "wifi_ssid", "", 0, 32)                                                      \
+    /* A WPA2 passphrase is up to 63 characters, or 64 hex digits for a raw                        \
+       PSK. Anything that does not fit is not a key this device can use, and                       \
+       nev_store_set_str refuses it rather than storing a truncated one that                       \
+       would fail to associate for a reason nobody could see. */                                   \
+    X(WIFI_PASS, STR, "wifi_pass", "", 0, 64)                                                      \
     X(PAIR_TOKEN, STR, "pair_token", "", 0, 64)                                                    \
     /* game high scores, owned by the shared table in game_engine */                               \
     X(HS_SNAKE, U32, "hs_snake", "0", 0, 999999)                                                   \

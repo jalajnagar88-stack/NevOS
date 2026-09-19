@@ -9,6 +9,7 @@ set(NEV_SERVICES_CORE_SRCS
   ${NEV_SERVICES_DIR}/src/net_core.c
   ${NEV_SERVICES_DIR}/src/ota_core.c
   ${NEV_SERVICES_DIR}/src/sound_core.c
+  ${NEV_SERVICES_DIR}/src/talk_core.c
 )
 
 set(NEV_SERVICES_SRCS
@@ -20,6 +21,7 @@ set(NEV_SERVICES_SRCS
   ${NEV_SERVICES_DIR}/src/sound_service.c
   ${NEV_SERVICES_DIR}/src/net_service.c
   ${NEV_SERVICES_DIR}/src/sys_service.c
+  ${NEV_SERVICES_DIR}/src/ota_service.c
 )
 
 set(NEV_SERVICES_TEST_SRCS
@@ -27,6 +29,7 @@ set(NEV_SERVICES_TEST_SRCS
   ${NEV_SERVICES_DIR}/test/test_net_core.c
   ${NEV_SERVICES_DIR}/test/test_ota_core.c
   ${NEV_SERVICES_DIR}/test/test_sound_core.c
+  ${NEV_SERVICES_DIR}/test/test_talk_core.c
 )
 
 set(NEV_SERVICES_INCLUDE_DIRS ${NEV_SERVICES_DIR}/include)

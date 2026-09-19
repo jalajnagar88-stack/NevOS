@@ -30,6 +30,16 @@ lv_obj_t *nev_ui_button(lv_obj_t *parent, const char *text, lv_event_cb_t cb, vo
 lv_obj_t *nev_ui_button_ghost(lv_obj_t *parent, const char *text, lv_event_cb_t cb,
                               void *user_data);
 
+/*
+ * A button that reports the press and the release, not the click.
+ *
+ * `cb` receives LV_EVENT_PRESSED, LV_EVENT_RELEASED and LV_EVENT_PRESS_LOST;
+ * switch on lv_event_get_code(). PRESS_LOST matters and is easy to forget: a
+ * finger that slides off the button never sends RELEASED, and a hold-to-talk
+ * button that misses it leaves the microphone open.
+ */
+lv_obj_t *nev_ui_hold_button(lv_obj_t *parent, const char *text, lv_event_cb_t cb, void *user_data);
+
 /* A vertical scrolling list to hang rows on. */
 lv_obj_t *nev_ui_list(lv_obj_t *parent);
 
@@ -60,10 +70,18 @@ void nev_ui_progress_ring_set(lv_obj_t *ring, int32_t percent);
  */
 void nev_ui_toast(const char *text, uint32_t ms);
 
+/* The same thing in the warning colour, for something the user is meant to act
+ * on rather than merely notice. */
+void nev_ui_toast_alert(const char *text, uint32_t ms);
+
 /*
  * A blocking confirmation. `on_confirm` fires only on the confirm button; the
  * modal closes itself either way. `destructive` colours the confirm button as
  * a warning, for things like factory reset.
+ *
+ * A NULL `on_confirm` makes it a notice rather than a question: no Cancel, one
+ * button, and it closes when that is pressed. Use it for something too long to
+ * be a toast that the user only has to read.
  */
 void nev_ui_modal(const char *title, const char *body, const char *confirm_text, bool destructive,
                   lv_event_cb_t on_confirm, void *user_data);

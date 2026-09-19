@@ -16,6 +16,7 @@
 #include "nev_port/nev_net.h"
 #include "nev_port/nev_rand.h"
 #include "nev_port/nev_time.h"
+#include "nev_kernel/nev_ota_offer.h"
 
 #define TAG              "bridge"
 
@@ -111,6 +112,48 @@ static void publish_text(uint16_t type, const char *text, uint32_t extra) {
      * two subsystems away from the mistake.
      */
     nev_blob_release(handle);
+}
+
+/*
+ * Relays an update offer for ota_service to judge.
+ *
+ * BRIDGE.OTA_OFFER rather than OTA.AVAILABLE, and this is not pedantry: every
+ * domain has exactly one producer and nev_bus_publish asserts it, so the bridge
+ * publishing into the OTA domain was a debug-build abort waiting for the first
+ * daemon that ever sent this message. It is also the wrong shape — whether an
+ * offer is worth taking is a decision, and the transport does not get to make
+ * decisions.
+ *
+ * `url` is decoded and deliberately dropped. Nothing can fetch it yet, and when
+ * something can it should come down this link rather than out to an address the
+ * device was handed; see ota_service.h.
+ */
+static void publish_ota_offer(const nev_msg_ota_available_t *msg) {
+    nev_ota_offer_t offer;
+    memset(&offer, 0, sizeof(offer));
+    snprintf(offer.version, sizeof(offer.version), "%s", msg->version);
+    offer.size_bytes = msg->size_bytes;
+    /* A digest of the wrong length is not a digest. Zeroes are left in place
+     * and ota_core rejects the offer, which is the behaviour we want: an
+     * unverifiable image must not install. */
+    if (msg->sha256_len == sizeof(offer.sha256)) {
+        memcpy(offer.sha256, msg->sha256, sizeof(offer.sha256));
+    }
+
+    uint8_t *data = NULL;
+    nev_blob_t handle = nev_blob_alloc(sizeof(offer), &data);
+    if (handle == NEV_BLOB_NONE) {
+        NEV_LOGW(TAG, "no blob for an update offer; dropping it");
+        return;
+    }
+    memcpy(data, &offer, sizeof(offer));
+
+    nev_event_t ev = nev_event_make(NEV_EVT_BRIDGE_OTA_OFFER, NEV_SRC_BRIDGE);
+    ev.flags |= NEV_EVF_BLOB;
+    ev.p.blob.handle = handle;
+    ev.p.blob.len = (uint32_t)sizeof(offer);
+    (void)nev_bus_publish(&ev);
+    nev_blob_release(handle); /* step 3 of the ownership protocol */
 }
 
 /* Wraps an encoded payload in its length prefix and sends it. */
@@ -363,7 +406,7 @@ static void on_message(const uint8_t *frame, size_t frame_len) {
         case NEV_MSG_OTA_AVAILABLE: {
             nev_msg_ota_available_t msg;
             if (nev_proto_decode_ota_available(payload, payload_len, &msg) != NEV_OK) break;
-            publish_text(NEV_EVT_OTA_AVAILABLE, msg.version, 0);
+            publish_ota_offer(&msg);
             break;
         }
 

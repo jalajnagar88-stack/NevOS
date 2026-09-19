@@ -3,7 +3,11 @@
 # app means adding a folder and one line here; nothing references it by name.
 set(NEV_APPS_DIR ${CMAKE_CURRENT_LIST_DIR})
 
+set(NEV_APP_COMMON_INCLUDE_DIRS ${NEV_APPS_DIR}/common/include)
+
 set(NEV_APP_SRCS
+  # Shared between apps, not an app itself: it registers nothing.
+  ${NEV_APPS_DIR}/common/talk.c
   ${NEV_APPS_DIR}/games/snake/snake_app.c
   ${NEV_APPS_DIR}/games/snake/snake_core.c
   ${NEV_APPS_DIR}/games/breakout/breakout_app.c
@@ -15,6 +19,7 @@ set(NEV_APP_SRCS
   ${NEV_APPS_DIR}/games/match/match_app.c
   ${NEV_APPS_DIR}/games/match/match_core.c
   ${NEV_APPS_DIR}/system/settings/settings_app.c
+  ${NEV_APPS_DIR}/system/wifi/wifi_app.c
   ${NEV_APPS_DIR}/system/clock/clock_app.c
   ${NEV_APPS_DIR}/system/link/link_app.c
   ${NEV_APPS_DIR}/productivity/agent/agent_app.c
