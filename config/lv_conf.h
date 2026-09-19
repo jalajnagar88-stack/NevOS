@@ -69,8 +69,23 @@
 #define LV_STDARG_INCLUDE       <stdarg.h>
 
 #if LV_USE_STDLIB_MALLOC == LV_STDLIB_BUILTIN
-    /*Size of the memory available for `lv_malloc()` in bytes (>= 2kB)*/
-    #define LV_MEM_SIZE (256 * 1024U)          /*[bytes]*/
+    /*
+     * Size of the memory available for `lv_malloc()` in bytes (>= 2kB).
+     *
+     * 128 KB, down from 256 KB, and not by choice: at 256 KB the firmware does
+     * not link. `.dram0.bss` overflowed `dram0_0_seg` by 22,472 bytes the first
+     * time the device was ever linked, and this pool is a static array in .bss
+     * — half the ESP32-S3's entire 512 KB of internal SRAM, reserved before a
+     * single widget exists.
+     *
+     * BUDGET.md called this lever from the start: "256 KB is generous for the
+     * shell NEVOS actually draws, and can likely drop to 128 KB". It was right.
+     *
+     * Both targets get the same number on purpose. The simulator is only worth
+     * having if running out of memory there means running out of memory on the
+     * device, so the laptop gets the robot's ceiling rather than its own.
+     */
+    #define LV_MEM_SIZE (128 * 1024U)          /*[bytes]*/
 
     /*Size of the memory expand for `lv_malloc()` in bytes*/
     #define LV_MEM_POOL_EXPAND_SIZE 0

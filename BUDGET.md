@@ -19,8 +19,8 @@ Timing numbers only become real at M5.
 |---|---|---|---|
 | Bus subscriber rings | 17,536 | both (static, `sizeof`) | 16 slots x 32 events x 32 B + headers |
 | LVGL draw strips | 115,200 | both (2 x 480x60 RGB565) | the §5 strategy; DMA-capable |
-| LVGL heap (`LV_MEM_SIZE`) | 262,144 | configured ceiling | bounded on purpose, not a clib heap |
-| **Committed so far** | **394,880** | | task stacks and Wi-Fi not yet added |
+| LVGL heap (`LV_MEM_SIZE`) | 131,072 | configured ceiling | bounded on purpose, not a clib heap. **Was 262,144; halved because the firmware would not link.** See the last section. |
+| **Committed so far** | **263,808** | | task stacks and Wi-Fi not yet added |
 
 This is already tight, and it is the number to watch. Wi-Fi and BLE want
 roughly 40–50 KB of internal memory once `net_service` exists at M5, and the
@@ -28,6 +28,11 @@ task stacks in ARCHITECTURE.md §4 add about 42 KB. The lever, if it comes to
 one, is `LV_MEM_SIZE`: 256 KB is generous for the shell NEVOS actually draws,
 and can likely drop to 128 KB. A second lever is the strip height — 480x40
 instead of 480x60 saves 38 KB at the cost of more flush calls per frame.
+
+> **It did come to one.** The first lever was pulled at the first device link,
+> which overflowed internal SRAM by 22 KB. The second is still in hand.
+> This paragraph is left as written because being right about where the
+> pressure would come from is the only reason the fix took minutes.
 
 ### PSRAM (8 MB; plentiful, slow)
 
@@ -48,8 +53,8 @@ whether 16 medium blocks is right for 20 ms frames at 50/s.
 | `assets` (LittleFS) | 5.8 MB | fonts, sounds, sprites |
 | `nvs` + `otadata` + `phy` + `coredump` | ~100 KB | |
 
-**Application size: not yet measured.** It requires the ESP-IDF build, which
-needs the Xtensa toolchain. Fill this in at the first device build.
+**Application size:** see "The first device link" below — measured on every
+push once the firmware built for the first time.
 
 ### Frame time
 
@@ -360,6 +365,51 @@ The OTA download is not in this table because it is not written. When it is, it
 will need a staging buffer and a partition to write into, and the partition is
 the device's, not the simulator's. That is the one place where the arithmetic
 here stops being checkable on a laptop.
+
+---
+
+## The first device link — measured, not estimated
+
+Everything above this line was arithmetic. This is what the linker said the
+first time the whole OS was ever linked for Xtensa.
+
+**It did not fit.**
+
+    nevos.elf section `.dram0.bss' will not fit in region `dram0_0_seg'
+    region `dram0_0_seg' overflowed by 22472 bytes
+
+Internal SRAM was over by 22 KB. The estimate above said ~415 KB of 512 KB
+committed, which left 97 KB for "LCD and I2S DMA descriptors, the Wi-Fi stack's
+own buffers, and task stacks" — and the real answer is that those, plus what
+ESP-IDF itself reserves before `app_main` runs, come to more than 97 KB.
+
+The fix is the lever this document named at M1 and never had to pull:
+
+| | Before | After |
+|---|---|---|
+| `LV_MEM_SIZE` | 256 KB | **128 KB** |
+
+That is a static array in `.bss` — half the chip's entire internal memory,
+reserved before a single widget exists. 128 KB frees 131,072 bytes against a
+22,472-byte overflow, which leaves real headroom rather than just clearing the
+bar.
+
+Both targets get the new number. A simulator whose memory ceiling is higher
+than the device's is a simulator that cannot tell you the truth about memory,
+and every screen in the system was re-run against 128 KB before this was
+committed: all thirteen apps, the full check, and the end-to-end gate.
+
+**What this says about the rest of the estimates.** The internal SRAM table was
+the one number this document said to watch, and it was wrong in the direction
+that matters. Treat every other figure here as unverified until the same thing
+happens to it — the frame times especially, which are still host numbers and
+still say almost nothing about a 240 MHz core reading from PSRAM.
+
+### Application size
+
+Now measured on every push: the CI firmware job runs `idf.py size` after the
+build. Until this link succeeded there was no number to report, which is why
+this section said "not yet measured" for four milestones.
 
 ---
 
