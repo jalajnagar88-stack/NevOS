@@ -29,7 +29,7 @@ jobs:
 
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
-        run: brew install ninja sdl2 clang-format
+        run: brew install ninja sdl2
 
       - name: Layering rules and generated-code freshness
         run: |
@@ -39,7 +39,16 @@ jobs:
       - name: Companion daemon
         run: ./tools/build.sh rust
 
+      # Linux only, deliberately. Formatting is not platform-dependent, but
+      # clang-format is: the macOS runner's build is several major versions
+      # ahead of the one apt ships, and the two disagree about where a line
+      # break belongs in a macro whose comment contains an em-dash — they count
+      # the column in bytes and in characters respectively. Checking the same
+      # files twice with two different formatters cannot pass, and the one it
+      # has to agree with is the one contributors get from the repo's own
+      # tooling.
       - name: Formatting
+        if: runner.os == 'Linux'
         run: ./tools/build.sh format-check
 
       - name: Unit tests
