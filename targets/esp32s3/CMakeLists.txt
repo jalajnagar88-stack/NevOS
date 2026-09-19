@@ -4,8 +4,11 @@
 #   idf.py -C targets/esp32s3 set-target esp32s3
 #   idf.py -C targets/esp32s3 build flash monitor
 #
-# M1 scope: nev_port and nev_kernel running on real silicon. The display stack
-# arrives with the panel driver in M5 — see components/nev_board/src/esp32s3.
+# This builds the whole operating system, not a subset: the shell, the apps, the
+# persona, the services and the bridge are the same source files the simulator
+# compiles. Only nev_board differs, and its ESP implementation is still a stub
+# until a board is chosen — so this boots and runs against hardware that reports
+# nothing. Compiling it on every push is the point.
 cmake_minimum_required(VERSION 3.20)
 
 #
@@ -26,6 +29,10 @@ set(EXTRA_COMPONENT_DIRS
   ${CMAKE_CURRENT_LIST_DIR}/../../third_party/lvgl
 )
 
+set(NEVOS_BOARD "devkit_480" CACHE STRING "Board definition under boards/")
+
+include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+
 #
 # One LVGL configuration for both targets.
 #
@@ -34,12 +41,13 @@ set(EXTRA_COMPONENT_DIRS
 # config/lv_conf.h through LV_CONF_PATH; this puts the same file on the path
 # here, so the device and the simulator are configured identically. Two
 # different LVGL configurations would make "the same code runs on both" mean
-# very little — the memory ceiling, the enabled widgets and the colour depth
-# are all in that file.
+# very little — the memory ceiling, the enabled widgets and the colour depth all
+# live in that file.
+#
+# After the include and before project(), which is the only window that works:
+# project.cmake is what defines idf_build_set_property, and project() is what
+# consumes the properties by running idf_build_process.
 #
 idf_build_set_property(COMPILE_OPTIONS "-I${CMAKE_CURRENT_LIST_DIR}/../../config" APPEND)
 
-set(NEVOS_BOARD "devkit_480" CACHE STRING "Board definition under boards/")
-
-include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(nevos)
