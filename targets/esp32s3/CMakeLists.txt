@@ -22,8 +22,22 @@ cmake_minimum_required(VERSION 3.20)
 #
 set(EXTRA_COMPONENT_DIRS
   ${CMAKE_CURRENT_LIST_DIR}/../../components
+  ${CMAKE_CURRENT_LIST_DIR}/../../apps
   ${CMAKE_CURRENT_LIST_DIR}/../../third_party/lvgl
 )
+
+#
+# One LVGL configuration for both targets.
+#
+# LVGL's ESP component compiles with -DLV_CONF_INCLUDE_SIMPLE, which makes it
+# `#include "lv_conf.h"` from the include path. The host build points at
+# config/lv_conf.h through LV_CONF_PATH; this puts the same file on the path
+# here, so the device and the simulator are configured identically. Two
+# different LVGL configurations would make "the same code runs on both" mean
+# very little — the memory ceiling, the enabled widgets and the colour depth
+# are all in that file.
+#
+idf_build_set_property(COMPILE_OPTIONS "-I${CMAKE_CURRENT_LIST_DIR}/../../config" APPEND)
 
 set(NEVOS_BOARD "devkit_480" CACHE STRING "Board definition under boards/")
 
