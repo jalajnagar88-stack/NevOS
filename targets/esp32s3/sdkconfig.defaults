@@ -33,3 +33,18 @@ CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y
 CONFIG_COMPILER_OPTIMIZATION_SIZE=y
 CONFIG_COMPILER_WARN_WRITE_STRINGS=y
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+
+#
+# LVGL reads config/lv_conf.h, the same file the simulator uses.
+#
+# This has to be said explicitly, and it is the single most important line in
+# this file. LVGL's ESP-IDF component defaults CONFIG_LV_CONF_SKIP to y, which
+# makes it ignore lv_conf.h entirely and build from Kconfig instead. The device
+# would then have had a different LVGL from the simulator — different fonts,
+# a different memory ceiling, a different colour depth — while both builds went
+# green and the difference showed up only as a device that looked wrong.
+#
+# It surfaced as `lv_font_montserrat_28 undeclared`: the shell draws every app
+# icon in it, the simulator has it, and Kconfig's defaults do not.
+#
+CONFIG_LV_CONF_SKIP=n
