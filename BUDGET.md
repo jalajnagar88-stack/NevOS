@@ -373,7 +373,7 @@ here stops being checkable on a laptop.
 Everything above this line was arithmetic. This is what the linker said the
 first time the whole OS was ever linked for Xtensa.
 
-**It did not fit.**
+**It did not fit.** (It does now — the measured figures are below.)
 
     nevos.elf section `.dram0.bss' will not fit in region `dram0_0_seg'
     region `dram0_0_seg' overflowed by 22472 bytes
@@ -405,11 +405,37 @@ that matters. Treat every other figure here as unverified until the same thing
 happens to it — the frame times especially, which are still host numbers and
 still say almost nothing about a 240 MHz core reading from PSRAM.
 
-### Application size
+### What the linker actually says
 
-Now measured on every push: the CI firmware job runs `idf.py size` after the
-build. Until this link succeeded there was no number to report, which is why
-this section said "not yet measured" for four milestones.
+The whole OS, built for esp32s3 with ESP-IDF v5.2.2. Reported on every push by
+`idf.py size` in the CI firmware job.
+
+| | Bytes | Of what | Note |
+|---|---|---|---|
+| Static IRAM | 57,130 | 15.8% used, 305,110 remain | instruction RAM; comfortable |
+| **Static D/IRAM** | **196,296** | **56.8% used, 149,560 remain** | **the number that matters** |
+| &nbsp;&nbsp;`.data` | 12,608 | | initialised statics |
+| &nbsp;&nbsp;`.bss` | 183,688 | | zero-initialised, incl. the 128 KB LVGL pool |
+| Flash `.text` | 440,347 | | |
+| Flash `.rodata` | 239,852 | | fonts are most of this |
+| **Total image** | **750,193** | **86% of the 5 MB slot free** | flash is not the constraint |
+
+**Flash was never going to be the problem and is not.** 750 KB in a 5 MB OTA
+slot, with fonts the largest single contributor to `.rodata`. There is room for
+the assets partition to grow and for the image to double before anyone needs to
+think about it.
+
+**Internal memory is the problem, as it always was.** 149,560 bytes remain, and
+that is what everything not yet present has to come out of: the Wi-Fi stack
+(30–50 KB), the task stacks in ARCHITECTURE.md §4 (~42 KB), the LCD and I2S DMA
+descriptors, and whatever the panel driver wants for itself. Those add to
+roughly 100 KB of the 146 KB left, which is a real margin and not a generous
+one.
+
+The second lever — 480x40 draw strips instead of 480x60, worth 38 KB — is
+deliberately unspent. It is what pays for the panel driver if the first
+estimate of its appetite turns out to be as wrong as this document's estimate
+of everything else was.
 
 ---
 
