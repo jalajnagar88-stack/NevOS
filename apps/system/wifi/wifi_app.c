@@ -80,6 +80,14 @@ static void keyboard_hide(void) {
     lv_obj_add_flag(s_keyboard, LV_OBJ_FLAG_HIDDEN);
 }
 
+/* The keyboard's own tick and cross. Without these the only way off the
+ * keyboard is tapping a field behind it, and half of it is behind the
+ * keyboard. */
+static void keyboard_cb(lv_event_t *e) {
+    const lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_READY || code == LV_EVENT_CANCEL) keyboard_hide();
+}
+
 static void field_cb(lv_event_t *e) {
     lv_obj_t *ta = lv_event_get_target(e);
     switch (lv_event_get_code(e)) {
@@ -199,6 +207,27 @@ static nev_err_t wifi_launch(lv_obj_t *root) {
     lv_obj_set_size(s_keyboard, LV_PCT(100), LV_PCT(45));
     lv_obj_align(s_keyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_add_flag(s_keyboard, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_event_cb(s_keyboard, keyboard_cb, LV_EVENT_ALL, NULL);
+
+    /*
+     * Dressed in the device's own tokens. LVGL's keyboard arrives in the
+     * default light theme, and a white keyboard sliding up over a black screen
+     * is the single most obvious way to make one device look like two.
+     */
+    lv_obj_set_style_bg_color(s_keyboard, NEV_COL_SURFACE, LV_PART_MAIN);
+    lv_obj_set_style_border_width(s_keyboard, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(s_keyboard, NEV_SP_1, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(s_keyboard, NEV_COL_SURFACE_ALT, LV_PART_ITEMS);
+    lv_obj_set_style_text_color(s_keyboard, NEV_COL_INK, LV_PART_ITEMS);
+    lv_obj_set_style_border_width(s_keyboard, 0, LV_PART_ITEMS);
+    lv_obj_set_style_radius(s_keyboard, NEV_RADIUS_SM, LV_PART_ITEMS);
+    lv_obj_set_style_bg_color(s_keyboard, NEV_COL_ACCENT, LV_PART_ITEMS | LV_STATE_PRESSED);
+    /* The control keys — shift, backspace, the mode switches, the tick — carry
+     * LV_BUTTONMATRIX_CTRL_CHECKED, so LVGL styles them from the checked state
+     * and they stay in the default theme unless this is said as well. */
+    lv_obj_set_style_bg_color(s_keyboard, NEV_COL_SURFACE, LV_PART_ITEMS | LV_STATE_CHECKED);
+    lv_obj_set_style_text_color(s_keyboard, NEV_COL_INK_MUTED, LV_PART_ITEMS | LV_STATE_CHECKED);
+    lv_obj_set_style_border_width(s_keyboard, 0, LV_PART_ITEMS | LV_STATE_CHECKED);
 
     s_painted = (nev_net_state_t)0xFF;
     paint_status(true);

@@ -148,6 +148,53 @@ echo "    code accepted, $DEVICE_ID paired"
 
 wait "$SIM_PID" || true
 
+# ------------------------------------------- push to talk, and a notification
+
+# A second run of the same device. The pairing is in the settings file, so this
+# reconnects with its token rather than showing a code again — which is also
+# worth proving, and was not, because the first run is the only one that ever
+# pairs.
+step "holding the button: a dictated note, and a message from the computer"
+
+stdbuf -oL "$SIM" --bridge --app notes --frames 360 --hold a,90,260 \
+  --settings "$SETTINGS" --shot "$WORK/notes.ppm" > "$WORK/notes.log" 2>&1 &
+NOTES_PID=$!
+
+# Send the notification once the device is actually connected; sending it before
+# there is a socket would prove nothing about the device at all.
+SENT=0
+for _ in $(seq 1 60); do
+  if grep -q "connected" "$WORK/notes.log" 2>/dev/null; then
+    if curl_json -X POST -H 'Content-Type: application/json' \
+      -d '{"title":"The build finished","body":"all green","urgent":false}' \
+      "http://127.0.0.1:$CONTROL/api/notify" | grep -q '"sent_to":[1-9]'; then
+      SENT=1
+      break
+    fi
+  fi
+  sleep 0.25
+done
+[ "$SENT" = "1" ] || { tail -20 "$WORK/notes.log"; fail "the daemon could not deliver a notification"; }
+
+wait "$NOTES_PID" || true
+
+if grep -q "enter [0-9]\{6\}" "$WORK/notes.log"; then
+  fail "the device asked to pair again instead of using its stored token"
+fi
+
+# The gesture reached the microphone. 170 frames of holding is about five
+# seconds, well past the 350 ms floor, so a discard here is a real failure
+# rather than a timing accident.
+grep -q "capture .* started (note)" "$WORK/notes.log" \
+  || { tail -20 "$WORK/notes.log"; fail "holding the button never opened the microphone"; }
+
+grep -q "notification: The build finished" "$WORK/notes.log" \
+  || { tail -20 "$WORK/notes.log"; fail "the notification reached the daemon but not the screen"; }
+
+NOTES=$(count_files "$WORK/data/notes")
+[ "$NOTES" -ge 1 ] || fail "the dictated note was not filed"
+echo "    dictated a note, filed $NOTES; the notification reached the screen"
+
 # ---------------------------------------------------------- assertions
 
 step "what came out the far end"
@@ -186,9 +233,12 @@ curl_json -X POST "http://127.0.0.1:$CONTROL/api/purge/all" | grep -q '"removed"
   || fail "the purge control failed"
 REMAINING=$(count_files "$WORK/data/transcripts")
 [ "$REMAINING" = "0" ] || fail "the purge left $REMAINING transcript(s) behind"
+REMAINING_NOTES=$(count_files "$WORK/data/notes")
+[ "$REMAINING_NOTES" = "0" ] || fail "the purge left $REMAINING_NOTES note(s) behind"
 # Erasing your notes must not also unpair the robot on your desk.
 is_paired "$DEVICE_ID" || fail "the purge unpaired the device, which it must not"
 echo "    purge erased the transcripts and kept the pairing"
 
 echo
-echo "e2e: the device paired, answered, recorded and filed a meeting, and purged it."
+echo "e2e: the device paired, answered, recorded a meeting, dictated a note,"
+echo "     took a notification, and purged everything it had kept."

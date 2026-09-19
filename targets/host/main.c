@@ -255,6 +255,18 @@ typedef struct {
         uint32_t frame;
     } taps[4];
     size_t tap_count;
+    /*
+     * A button held down across a range of frames, for push-to-talk.
+     *
+     * --tap cannot express it: hold-to-talk is defined by how long the button
+     * stays down, so a press and a release on consecutive frames is precisely
+     * the gesture the state machine is built to throw away.
+     */
+    struct {
+        uint8_t mask;
+        uint32_t from, to;
+    } holds[2];
+    size_t hold_count;
 } options_t;
 
 static void usage(const char *argv0) {
@@ -262,6 +274,7 @@ static void usage(const char *argv0) {
             "usage: %s [--persona] [--boot] [--script] [--mood NAME]\n"
             "          [--app ID] [--settings PATH] [--play]\n"
             "          [--bridge] [--battery PCT] [--tap X,Y,FRAME]...\n"
+            "          [--hold a|b,FROM,TO]...\n"
             "          [--frames N] [--shot PATH.ppm]\n"
             "          [--strip DIR] [--strip-every N]\n",
             argv0);
@@ -300,6 +313,20 @@ static options_t parse_args(int argc, char **argv) {
             o.taps[o.tap_count].y = (int32_t)y;
             o.taps[o.tap_count].frame = f;
             o.tap_count++;
+        } else if (!strcmp(a, "--hold") && i + 1 < argc) {
+            char which = 0;
+            unsigned from = 0, to = 0;
+            if (sscanf(argv[++i], "%c,%u,%u", &which, &from, &to) != 3) usage(argv[0]);
+            if (o.hold_count >= sizeof(o.holds) / sizeof(o.holds[0])) usage(argv[0]);
+            if (which == 'a' || which == 'A')
+                o.holds[o.hold_count].mask = NEV_BTN_A;
+            else if (which == 'b' || which == 'B')
+                o.holds[o.hold_count].mask = NEV_BTN_B;
+            else
+                usage(argv[0]);
+            o.holds[o.hold_count].from = from;
+            o.holds[o.hold_count].to = to;
+            o.hold_count++;
         } else if (!strcmp(a, "--app") && i + 1 < argc)
             o.app_id = argv[++i];
         else if (!strcmp(a, "--settings") && i + 1 < argc)
@@ -411,7 +438,21 @@ int main(int argc, char **argv) {
                                            NEV_TOUCH_UP);
             }
         }
-        if (opt.tap_count > 0 && !opt.play) frame_no++;
+        if (opt.hold_count > 0) {
+            /*
+             * Rebuilt from scratch each frame rather than toggled on the edges:
+             * two overlapping holds toggling the same mask would cancel each
+             * other, and the whole point of this is to reproduce a button
+             * being down for a length of time.
+             */
+            uint8_t mask = 0;
+            for (size_t h = 0; h < opt.hold_count; h++) {
+                if (frame_no >= opt.holds[h].from && frame_no < opt.holds[h].to)
+                    mask |= opt.holds[h].mask;
+            }
+            nev_board_sim_inject_buttons(mask);
+        }
+        if ((opt.tap_count > 0 || opt.hold_count > 0) && !opt.play) frame_no++;
         input_service_poll(now_ms);
         power_service_tick(now_ms);
         audio_service_poll(now_ms);

@@ -444,6 +444,7 @@ static void handle_event(const nev_event_t *ev) {
              */
             const char *text = (const char *)nev_blob_data(ev->p.blob.handle);
             if (!text || text[0] == '\0') break;
+            NEV_LOGI(TAG, "notification: %s", text);
             /* chunk_seq carries urgency, set by the bridge from the wire. */
             if (ev->p.blob.chunk_seq) {
                 nev_ui_toast_alert(text, 6000);
