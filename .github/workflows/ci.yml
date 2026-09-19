@@ -102,9 +102,14 @@ jobs:
         with:
           submodules: recursive
 
+      # `size` as well as `build`, because the application's flash footprint is
+      # the one number in BUDGET.md that cannot be measured on a host at all —
+      # it needs this toolchain. Printing it on every push is what stops it
+      # drifting towards the 5 MB OTA slot unnoticed.
       - name: Build with ESP-IDF v5.2.2
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.2.2
           target: esp32s3
           path: targets/esp32s3
+          command: idf.py build size
